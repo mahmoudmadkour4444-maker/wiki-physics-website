@@ -8,7 +8,8 @@ import {
   ChevronRight, Play, Upload, Link, FileVideo, CheckCircle, XCircle,
   Clock, AlertCircle, Send, Phone, GraduationCap, Monitor,
   MessageSquare, BarChart3, Bell, Home, ClipboardList, User,
-  RefreshCw, Copy, ExternalLink, Smartphone, Wifi
+  RefreshCw, Copy, ExternalLink, Smartphone, Wifi, Inbox, Zap,
+  LayoutGrid, List
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -145,6 +146,20 @@ function getYouTubeId(url: string): string | null {
   return (match && match[2].length === 11) ? match[2] : null;
 }
 
+// ========== RANDOM CODE GENERATOR ==========
+function generateRandomCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const segments = [];
+  for (let s = 0; s < 4; s++) {
+    let seg = '';
+    for (let i = 0; i < 4; i++) {
+      seg += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    segments.push(seg);
+  }
+  return segments.join('-');
+}
+
 // ========== MAIN APP ==========
 export default function WikiPlatform() {
   const { toast } = useToast();
@@ -177,6 +192,16 @@ export default function WikiPlatform() {
 
   // Admin tab
   const [adminTab, setAdminTab] = useState('dashboard');
+
+  // Notifications inbox
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showInbox, setShowInbox] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Batch key generation
+  const [batchKeyCount, setBatchKeyCount] = useState(1);
+  const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
+  const [showGeneratedCodes, setShowGeneratedCodes] = useState(false);
 
   // Secret admin access - 7 clicks on logo
   const [logoClickCount, setLogoClickCount] = useState(0);
@@ -253,6 +278,18 @@ export default function WikiPlatform() {
     } catch (e) { console.error(e); }
   }, []);
 
+  const loadNotifications = useCallback(async () => {
+    try {
+      const res = await fetch('/api/requests');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const pendingRequests = data.filter((r: any) => r.status === 'pending');
+        setNotifications(pendingRequests);
+        setUnreadCount(pendingRequests.length);
+      }
+    } catch (e) { console.error(e); }
+  }, []);
+
   const loadAdminData = useCallback(async () => {
     try {
       if (adminTab === 'dashboard') {
@@ -280,8 +317,9 @@ export default function WikiPlatform() {
         const data = await res.json();
         setSettings(data);
       }
+      loadNotifications();
     } catch (e) { console.error(e); }
-  }, [adminTab]);
+  }, [adminTab, loadNotifications]);
 
   // Check existing sessions
   useEffect(() => {
@@ -303,6 +341,15 @@ export default function WikiPlatform() {
       startTransition(() => { loadAdminData(); });
     }
   }, [admin, currentPage, adminTab, loadAdminData]);
+
+  // Poll for new notifications every 15 seconds when admin is logged in
+  useEffect(() => {
+    if (!admin) return;
+    const interval = setInterval(() => {
+      loadNotifications();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [admin, loadNotifications]);
 
   // ========== AUTH HANDLERS ==========
   const handleAdminLogin = async () => {
@@ -499,19 +546,35 @@ export default function WikiPlatform() {
   const handleAddKey = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(keyForm)
-      });
-      const data = await res.json();
-      if (data.id) {
+      const count = Math.min(Math.max(batchKeyCount || 1, 1), 50);
+      const createdCodes: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const autoCode = generateRandomCode();
+        const res = await fetch('/api/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...keyForm, code: autoCode })
+        });
+        const data = await res.json();
+        if (data.id) {
+          createdCodes.push(data.code || autoCode);
+        } else {
+          toast({ title: 'خطأ', description: data.error, variant: 'destructive' });
+          break;
+        }
+      }
+      if (createdCodes.length > 0) {
         setShowAddKey(false);
         setKeyForm({ courseId: '', maxDevices: 1, durationDays: 30, code: '' });
+        setGeneratedCodes(createdCodes);
+        setShowGeneratedCodes(true);
+        setBatchKeyCount(1);
         loadAdminData();
-        toast({ title: 'تم إنشاء المفتاح بنجاح', description: `الكود: ${data.code}` });
-      } else {
-        toast({ title: 'خطأ', description: data.error, variant: 'destructive' });
+        if (createdCodes.length === 1) {
+          toast({ title: 'تم إنشاء المفتاح بنجاح', description: `الكود: ${createdCodes[0]}` });
+        } else {
+          toast({ title: `تم إنشاء ${createdCodes.length} مفتاح بنجاح` });
+        }
       }
     } catch (e) {
       toast({ title: 'خطأ', description: 'حدث خطأ', variant: 'destructive' });
@@ -523,7 +586,6 @@ export default function WikiPlatform() {
     if (!student || !accessCode.trim()) return;
     setLoading(true);
     try {
-      // First validate
       const validateRes = await fetch('/api/keys/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -544,7 +606,6 @@ export default function WikiPlatform() {
         return;
       }
 
-      // Then activate
       const activateRes = await fetch('/api/keys/activate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -555,7 +616,7 @@ export default function WikiPlatform() {
       if (activateData.success) {
         setAccessCode('');
         checkStudentSession();
-        toast({ title: 'تم تفعيل الكود بنجاح! 🎉', description: `ينتهي في ${new Date(activateData.expiresAt).toLocaleDateString('ar-EG')}` });
+        toast({ title: 'تم تفعيل الكود بنجاح!', description: `ينتهي في ${new Date(activateData.expiresAt).toLocaleDateString('ar-EG')}` });
       } else {
         toast({ title: 'خطأ', description: activateData.error, variant: 'destructive' });
       }
@@ -683,7 +744,7 @@ export default function WikiPlatform() {
   const selectedCourse = courses.find(c => c.id === selectedCourseId);
   const selectedLesson = selectedCourse?.lessons?.find(l => l.id === selectedLessonId);
 
-  // ========== THEME CLASSES ==========
+  // ========== STYLE HELPERS ==========
   const bg = darkMode ? 'bg-[#050505]' : 'bg-gray-50';
   const bgCard = darkMode ? 'bg-[#111111] border-[rgba(255,122,0,0.18)]' : 'bg-white border-gray-200';
   const bgSecondary = darkMode ? 'bg-[#141414]' : 'bg-gray-100';
@@ -693,8 +754,648 @@ export default function WikiPlatform() {
   const borderColor = darkMode ? 'border-[rgba(255,122,0,0.18)]' : 'border-gray-200';
   const inputBg = darkMode ? 'bg-white/5 border-white/10 text-white' : 'bg-white border-gray-300 text-gray-900';
 
+  // Admin tab config
+  const adminTabs = [
+    { id: 'dashboard', icon: <BarChart3 className="w-5 h-5" />, label: 'إحصائيات' },
+    { id: 'courses', icon: <BookOpen className="w-5 h-5" />, label: 'كورسات' },
+    { id: 'lessons', icon: <Video className="w-5 h-5" />, label: 'دروس' },
+    { id: 'students', icon: <Users className="w-5 h-5" />, label: 'طلاب' },
+    { id: 'keys', icon: <Key className="w-5 h-5" />, label: 'أكواد' },
+    { id: 'requests', icon: <ClipboardList className="w-5 h-5" />, label: 'طلبات' },
+    { id: 'settings', icon: <Settings className="w-5 h-5" />, label: 'إعدادات' },
+  ];
+
+  // ========== ADMIN CONTENT RENDER ==========
+  const renderAdminContent = () => (<>
+    {/* Dashboard Tab */}
+    {adminTab === 'dashboard' && dashboardData && (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold">الإحصائيات</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {[
+            { label: 'الكورسات', value: dashboardData.stats.courses, icon: <BookOpen className="w-5 h-5" />, color: '#FF7A00' },
+            { label: 'الدروس', value: dashboardData.stats.lessons, icon: <Video className="w-5 h-5" />, color: '#4ade80' },
+            { label: 'الطلاب', value: dashboardData.stats.students, icon: <Users className="w-5 h-5" />, color: '#60a5fa' },
+            { label: 'المفاتيح', value: dashboardData.stats.keys, icon: <Key className="w-5 h-5" />, color: '#f87171' },
+            { label: 'طلبات معلقة', value: dashboardData.stats.requests, icon: <Bell className="w-5 h-5" />, color: '#fbbf24' },
+            { label: 'اشتراكات نشطة', value: dashboardData.stats.activeKeys, icon: <Wifi className="w-5 h-5" />, color: '#34d399' },
+          ].map((stat, i) => (
+            <Card key={i} className={`p-4 ${bgCard}`}>
+              <div className="flex items-center gap-2 mb-2" style={{ color: stat.color }}>
+                {stat.icon}
+              </div>
+              <div className="text-2xl font-bold">{stat.value}</div>
+              <div className={`text-sm ${textMuted}`}>{stat.label}</div>
+            </Card>
+          ))}
+        </div>
+
+        {dashboardData.recentRequests?.length > 0 && (
+          <div>
+            <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <Bell className="w-5 h-5 text-[#FF7A00]" /> آخر الطلبات
+            </h3>
+            <div className="space-y-2">
+              {dashboardData.recentRequests.map((req: AccessRequest) => (
+                <Card key={req.id} className={`p-3 ${bgCard}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-medium">{req.student?.name}</span>
+                      <span className={`text-sm mr-2 ${textMuted}`}>— {req.course?.title}</span>
+                    </div>
+                    <Badge className={req.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
+                      req.status === 'approved' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}>
+                      {req.status === 'pending' ? 'معلق' : req.status === 'approved' ? 'مقبول' : 'مرفوض'}
+                    </Badge>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {dashboardData.recentStudents?.length > 0 && (
+          <div>
+            <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <Users className="w-5 h-5 text-[#FF7A00]" /> آخر الطلاب المسجلين
+            </h3>
+            <div className="space-y-2">
+              {dashboardData.recentStudents.map((s: Student) => (
+                <Card key={s.id} className={`p-3 ${bgCard}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-[#FF7A00]/10 text-[#FF7A00] flex items-center justify-center text-sm font-bold">{s.name.charAt(0)}</div>
+                      <div>
+                        <p className="font-medium text-sm">{s.name}</p>
+                        <p className={`text-xs ${textMuted}`} dir="ltr">{s.phone}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs ${textMuted}`}>{new Date(s.createdAt).toLocaleDateString('ar-EG')}</span>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+
+    {adminTab === 'dashboard' && !dashboardData && (
+      <div className="text-center py-20">
+        <RefreshCw className={`w-10 h-10 mx-auto mb-4 animate-spin ${textMuted}`} />
+        <p className={textSecondary}>جاري تحميل البيانات...</p>
+      </div>
+    )}
+
+    {/* Courses Tab */}
+    {adminTab === 'courses' && (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">إدارة الكورسات</h2>
+          <Dialog open={showAddCourse} onOpenChange={setShowAddCourse}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black">
+                <Plus className="w-4 h-4 ml-2" /> إضافة كورس
+              </Button>
+            </DialogTrigger>
+            <DialogContent className={darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}>
+              <DialogHeader>
+                <DialogTitle>إضافة كورس جديد</DialogTitle>
+                <DialogDescription className="sr-only">نموذج إضافة كورس جديد</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label>اسم الكورس</Label>
+                  <Input value={courseForm.title} onChange={(e) => setCourseForm({...courseForm, title: e.target.value})} className={inputBg} />
+                </div>
+                <div>
+                  <Label>الوصف</Label>
+                  <Textarea value={courseForm.description} onChange={(e) => setCourseForm({...courseForm, description: e.target.value})} className={inputBg} />
+                </div>
+                <div>
+                  <Label>رابط الصورة</Label>
+                  <Input value={courseForm.image} onChange={(e) => setCourseForm({...courseForm, image: e.target.value})} className={inputBg} dir="ltr" />
+                </div>
+                <div>
+                  <Label>السعر</Label>
+                  <Input value={courseForm.price} onChange={(e) => setCourseForm({...courseForm, price: e.target.value})} className={inputBg} />
+                </div>
+                <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleAddCourse} disabled={loading}>
+                  {loading ? 'جاري الإضافة...' : 'إضافة الكورس'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="space-y-3">
+          {courses.map(course => (
+            <Card key={course.id} className={`p-4 ${bgCard}`}>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold">{course.title}</h3>
+                    <Badge variant="outline" className="text-xs">{course.price}</Badge>
+                    {!course.active && <Badge className="bg-red-500/20 text-red-500 text-xs">معطل</Badge>}
+                  </div>
+                  <p className={`text-sm ${textSecondary} truncate`}>{course.description}</p>
+                  <div className={`flex items-center gap-3 text-xs ${textMuted} mt-1`}>
+                    <span>{course._count?.lessons || 0} درس</span>
+                    <span>{course._count?.keys || 0} مفتاح</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button size="icon" variant="ghost" className="text-[#FF7A00]" onClick={() => {
+                    setEditingCourse(course);
+                    setCourseForm({ title: course.title, description: course.description, image: course.image || '', price: course.price });
+                    setShowEditCourse(true);
+                  }}>
+                    <Edit3 className="w-4 h-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="text-red-500" onClick={() => handleDeleteCourse(course.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* Edit Course Dialog */}
+    <Dialog open={showEditCourse} onOpenChange={setShowEditCourse}>
+      <DialogContent className={darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}>
+        <DialogHeader>
+          <DialogTitle>تعديل الكورس</DialogTitle>
+          <DialogDescription className="sr-only">نموذج تعديل بيانات الكورس</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 mt-4">
+          <div><Label>اسم الكورس</Label><Input value={courseForm.title} onChange={(e) => setCourseForm({...courseForm, title: e.target.value})} className={inputBg} /></div>
+          <div><Label>الوصف</Label><Textarea value={courseForm.description} onChange={(e) => setCourseForm({...courseForm, description: e.target.value})} className={inputBg} /></div>
+          <div><Label>رابط الصورة</Label><Input value={courseForm.image} onChange={(e) => setCourseForm({...courseForm, image: e.target.value})} className={inputBg} dir="ltr" /></div>
+          <div><Label>السعر</Label><Input value={courseForm.price} onChange={(e) => setCourseForm({...courseForm, price: e.target.value})} className={inputBg} /></div>
+          <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleEditCourse} disabled={loading}>
+            {loading ? 'جاري التعديل...' : 'حفظ التعديلات'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Lessons Tab */}
+    {adminTab === 'lessons' && (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">إدارة الدروس</h2>
+          <Dialog open={showAddLesson} onOpenChange={setShowAddLesson}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black">
+                <Plus className="w-4 h-4 ml-2" /> إضافة درس
+              </Button>
+            </DialogTrigger>
+            <DialogContent className={`max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}`}>
+              <DialogHeader>
+                <DialogTitle>إضافة درس جديد</DialogTitle>
+                <DialogDescription className="sr-only">نموذج إضافة درس جديد بالفيديو</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div><Label>عنوان الدرس</Label><Input value={lessonForm.title} onChange={(e) => setLessonForm({...lessonForm, title: e.target.value})} className={inputBg} /></div>
+                <div><Label>الوصف</Label><Textarea value={lessonForm.description} onChange={(e) => setLessonForm({...lessonForm, description: e.target.value})} className={inputBg} /></div>
+                <div>
+                  <Label>الكورس</Label>
+                  <Select value={lessonForm.courseId} onValueChange={(v) => setLessonForm({...lessonForm, courseId: v})}>
+                    <SelectTrigger className={inputBg}><SelectValue placeholder="اختر الكورس" /></SelectTrigger>
+                    <SelectContent>
+                      {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>نوع الفيديو</Label>
+                  <Select value={lessonForm.videoType} onValueChange={(v) => setLessonForm({...lessonForm, videoType: v})}>
+                    <SelectTrigger className={inputBg}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="youtube">يوتيوب</SelectItem>
+                      <SelectItem value="external">رابط خارجي</SelectItem>
+                      <SelectItem value="upload">رفع فيديو</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {lessonForm.videoType !== 'upload' ? (
+                  <div>
+                    <Label>رابط الفيديو</Label>
+                    <Input value={lessonForm.videoUrl} onChange={(e) => setLessonForm({...lessonForm, videoUrl: e.target.value})} className={inputBg} dir="ltr" placeholder="https://..." />
+                  </div>
+                ) : (
+                  <div>
+                    <Label>رفع فيديو</Label>
+                    <div className={`border-2 border-dashed ${borderColor} rounded-xl p-8 text-center`}>
+                      {uploading ? (
+                        <div className="space-y-3">
+                          <RefreshCw className="w-8 h-8 mx-auto text-[#FF7A00] animate-spin" />
+                          <p className="text-sm">جاري الرفع... {uploadProgress}%</p>
+                          <Progress value={uploadProgress} className="h-2" />
+                        </div>
+                      ) : lessonForm.videoUrl ? (
+                        <div className="space-y-2">
+                          <CheckCircle className="w-8 h-8 mx-auto text-green-500" />
+                          <p className="text-sm text-green-500">تم رفع الفيديو بنجاح</p>
+                          <Button size="sm" variant="outline" onClick={() => setLessonForm({...lessonForm, videoUrl: ''})}>إعادة الرفع</Button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer">
+                          <Upload className="w-8 h-8 mx-auto text-[#FF7A00] mb-2" />
+                          <p className={`text-sm ${textSecondary}`}>اضغط لاختيار فيديو</p>
+                          <p className={`text-xs ${textMuted}`}>MP4, MOV, AVI — حتى 500MB</p>
+                          <input type="file" accept="video/*" className="hidden" onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleVideoUpload(file);
+                          }} />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div><Label>الترتيب</Label><Input type="number" value={lessonForm.order} onChange={(e) => setLessonForm({...lessonForm, order: parseInt(e.target.value) || 0})} className={inputBg} /></div>
+                  <div><Label>المدة</Label><Input value={lessonForm.duration} onChange={(e) => setLessonForm({...lessonForm, duration: e.target.value})} className={inputBg} placeholder="مثال: 15:30" /></div>
+                </div>
+                <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleAddLesson} disabled={loading || uploading}>
+                  {loading ? 'جاري الإضافة...' : 'إضافة الدرس'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="space-y-3">
+          {courses.flatMap(c => (c.lessons || []).map(l => ({ ...l, courseName: c.title }))).sort((a, b) => a.order - b.order).map(lesson => (
+            <Card key={lesson.id} className={`p-4 ${bgCard}`}>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Video className={`w-4 h-4 shrink-0 ${lesson.videoType === 'youtube' ? 'text-red-500' : lesson.videoType === 'upload' ? 'text-green-500' : 'text-blue-500'}`} />
+                    <h3 className="font-medium truncate">{lesson.title}</h3>
+                    {!lesson.active && <Badge className="bg-red-500/20 text-red-500 text-xs">معطل</Badge>}
+                  </div>
+                  <p className={`text-sm ${textMuted} mt-1`}>
+                    {lesson.courseName} • {lesson.videoType === 'youtube' ? 'يوتيوب' : lesson.videoType === 'upload' ? 'مرفوع' : 'رابط خارجي'}
+                    {lesson.duration ? ` • ${lesson.duration}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button size="icon" variant="ghost" className="text-[#FF7A00]" onClick={() => {
+                    setEditingLesson(lesson);
+                    setLessonForm({
+                      title: lesson.title, description: lesson.description || '', videoType: lesson.videoType,
+                      videoUrl: lesson.videoUrl || lesson.filePath || '', courseId: lesson.courseId,
+                      order: lesson.order, duration: lesson.duration || ''
+                    });
+                    setShowEditLesson(true);
+                  }}>
+                    <Edit3 className="w-4 h-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="text-red-500" onClick={() => handleDeleteLesson(lesson.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* Edit Lesson Dialog */}
+    <Dialog open={showEditLesson} onOpenChange={setShowEditLesson}>
+      <DialogContent className={`max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}`}>
+        <DialogHeader>
+          <DialogTitle>تعديل الدرس</DialogTitle>
+          <DialogDescription className="sr-only">نموذج تعديل بيانات الدرس</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 mt-4">
+          <div><Label>عنوان الدرس</Label><Input value={lessonForm.title} onChange={(e) => setLessonForm({...lessonForm, title: e.target.value})} className={inputBg} /></div>
+          <div><Label>الوصف</Label><Textarea value={lessonForm.description} onChange={(e) => setLessonForm({...lessonForm, description: e.target.value})} className={inputBg} /></div>
+          <div>
+            <Label>نوع الفيديو</Label>
+            <Select value={lessonForm.videoType} onValueChange={(v) => setLessonForm({...lessonForm, videoType: v})}>
+              <SelectTrigger className={inputBg}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="youtube">يوتيوب</SelectItem>
+                <SelectItem value="external">رابط خارجي</SelectItem>
+                <SelectItem value="upload">رفع فيديو</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {lessonForm.videoType !== 'upload' ? (
+            <div><Label>رابط الفيديو</Label><Input value={lessonForm.videoUrl} onChange={(e) => setLessonForm({...lessonForm, videoUrl: e.target.value})} className={inputBg} dir="ltr" /></div>
+          ) : (
+            <div>
+              <Label>رفع فيديو جديد</Label>
+              <div className={`border-2 border-dashed ${borderColor} rounded-xl p-6 text-center`}>
+                {uploading ? (
+                  <div className="space-y-2">
+                    <RefreshCw className="w-6 h-6 mx-auto text-[#FF7A00] animate-spin" />
+                    <Progress value={uploadProgress} className="h-2" />
+                    <p className="text-xs">جاري الرفع... {uploadProgress}%</p>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer">
+                    <Upload className="w-6 h-6 mx-auto text-[#FF7A00] mb-1" />
+                    <p className="text-xs">اضغط لاختيار فيديو</p>
+                    <input type="file" accept="video/*" className="hidden" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleVideoUpload(file);
+                    }} />
+                  </label>
+                )}
+              </div>
+              {lessonForm.videoUrl && <p className="text-xs text-green-500 mt-2">الفيديو الحالي محفوظ</p>}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-4">
+            <div><Label>الترتيب</Label><Input type="number" value={lessonForm.order} onChange={(e) => setLessonForm({...lessonForm, order: parseInt(e.target.value) || 0})} className={inputBg} /></div>
+            <div><Label>المدة</Label><Input value={lessonForm.duration} onChange={(e) => setLessonForm({...lessonForm, duration: e.target.value})} className={inputBg} /></div>
+          </div>
+          <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleEditLesson} disabled={loading || uploading}>
+            {loading ? 'جاري التعديل...' : 'حفظ التعديلات'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Students Tab */}
+    {adminTab === 'students' && (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold">إدارة الطلاب ({students.length})</h2>
+        <div className="space-y-3">
+          {students.map(s => (
+            <Card key={s.id} className={`p-4 ${bgCard}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#FF7A00]/10 text-[#FF7A00] flex items-center justify-center font-bold">{s.name.charAt(0)}</div>
+                  <div>
+                    <p className="font-medium">{s.name}</p>
+                    <div className={`flex items-center gap-2 text-xs ${textMuted}`}>
+                      <Phone className="w-3 h-3" /> <span dir="ltr">{s.phone}</span>
+                      {s.whatsapp && <><MessageSquare className="w-3 h-3 mr-2" /><span dir="ltr">{s.whatsapp}</span></>}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-left">
+                  <div className={`text-xs ${textMuted}`}>{s.stage} — {s.year}</div>
+                  <div className={`text-xs ${textMuted}`}>{new Date(s.createdAt).toLocaleDateString('ar-EG')}</div>
+                </div>
+              </div>
+            </Card>
+          ))}
+          {students.length === 0 && (
+            <div className="text-center py-12">
+              <Users className={`w-12 h-12 mx-auto mb-3 ${textMuted}`} />
+              <p className={textSecondary}>لا يوجد طلاب مسجلين بعد</p>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* Keys Tab */}
+    {adminTab === 'keys' && (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">إدارة المفاتيح</h2>
+          <Dialog open={showAddKey} onOpenChange={setShowAddKey}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black">
+                <Plus className="w-4 h-4 ml-2" /> إنشاء مفتاح
+              </Button>
+            </DialogTrigger>
+            <DialogContent className={darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}>
+              <DialogHeader>
+                <DialogTitle>إنشاء مفتاح جديد</DialogTitle>
+                <DialogDescription className="sr-only">نموذج إنشاء مفتاح اشتراك - يتم توليد الكود تلقائياً</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div className={`p-3 rounded-lg ${darkMode ? 'bg-[#FF7A00]/10' : 'bg-orange-50'} border border-[#FF7A00]/20`}>
+                  <p className="text-sm text-[#FF7A00] flex items-center gap-2">
+                    <Zap className="w-4 h-4" /> يتم توليد الكود تلقائياً بشكل عشوائي
+                  </p>
+                </div>
+                <div>
+                  <Label>الكورس</Label>
+                  <Select value={keyForm.courseId} onValueChange={(v) => setKeyForm({...keyForm, courseId: v})}>
+                    <SelectTrigger className={inputBg}><SelectValue placeholder="اختر الكورس" /></SelectTrigger>
+                    <SelectContent>
+                      {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>عدد الأجهزة</Label>
+                    <Input type="number" min={1} max={10} value={keyForm.maxDevices} onChange={(e) => setKeyForm({...keyForm, maxDevices: parseInt(e.target.value) || 1})} className={inputBg} />
+                  </div>
+                  <div>
+                    <Label>مدة الاشتراك (يوم)</Label>
+                    <Input type="number" min={1} value={keyForm.durationDays} onChange={(e) => setKeyForm({...keyForm, durationDays: parseInt(e.target.value) || 30})} className={inputBg} />
+                  </div>
+                </div>
+                <div>
+                  <Label>عدد الأكواد المطلوبة</Label>
+                  <Input type="number" min={1} max={50} value={batchKeyCount} onChange={(e) => setBatchKeyCount(Math.min(Math.max(parseInt(e.target.value) || 1, 1), 50))} className={inputBg} />
+                  <p className={`text-xs ${textMuted} mt-1`}>يمكنك إنشاء حتى 50 كود دفعة واحدة</p>
+                </div>
+                <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleAddKey} disabled={loading || !keyForm.courseId}>
+                  {loading ? 'جاري الإنشاء...' : `إنشاء ${batchKeyCount > 1 ? `${batchKeyCount} أكواد` : 'مفتاح'}`}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="space-y-3">
+          {keys.map(key => (
+            <Card key={key.id} className={`p-4 ${bgCard}`}>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <code className={`text-sm font-mono px-2 py-0.5 rounded ${darkMode ? 'bg-white/10' : 'bg-gray-100'}`} dir="ltr">{key.code}</code>
+                    {key.active ? (
+                      <Badge className="bg-green-500/20 text-green-500 text-xs"><Unlock className="w-3 h-3 ml-1" />نشط</Badge>
+                    ) : (
+                      <Badge className="bg-red-500/20 text-red-500 text-xs"><Lock className="w-3 h-3 ml-1" />مستخدم</Badge>
+                    )}
+                  </div>
+                  <p className={`text-sm ${textMuted} mt-1`}>
+                    {key.course?.title} • {key.maxDevices} أجهزة • {key.durationDays} يوم
+                  </p>
+                  {key.activations && key.activations.length > 0 && (
+                    <p className={`text-xs ${textMuted} mt-0.5`}>
+                      تم التفعيل {key.activations.length} مرة • آخر تفعيل: {new Date(key.activations[key.activations.length - 1].activatedAt).toLocaleDateString('ar-EG')}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button size="icon" variant="ghost" onClick={() => {
+                    navigator.clipboard.writeText(key.code);
+                    toast({ title: 'تم نسخ الكود' });
+                  }}>
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="text-red-500" onClick={async () => {
+                    if (!confirm('هل تريد حذف هذا المفتاح؟')) return;
+                    try {
+                      await fetch(`/api/keys/${key.id}`, { method: 'DELETE' });
+                      loadAdminData();
+                      toast({ title: 'تم حذف المفتاح' });
+                    } catch (e) {
+                      toast({ title: 'خطأ', description: 'حدث خطأ', variant: 'destructive' });
+                    }
+                  }}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+          {keys.length === 0 && (
+            <div className="text-center py-12">
+              <Key className={`w-12 h-12 mx-auto mb-3 ${textMuted}`} />
+              <p className={textSecondary}>لا توجد مفاتيح</p>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* Generated Codes Display Dialog */}
+    <Dialog open={showGeneratedCodes} onOpenChange={setShowGeneratedCodes}>
+      <DialogContent className={darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}>
+        <DialogHeader>
+          <DialogTitle>الأكواد المُنشأة ({generatedCodes.length})</DialogTitle>
+          <DialogDescription className="sr-only">قائمة الأكواد التي تم إنشاؤها</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 mt-4">
+          <div className={`p-3 rounded-lg space-y-2 max-h-60 overflow-y-auto ${darkMode ? 'bg-white/5' : 'bg-gray-50'}`}>
+            {generatedCodes.map((code, i) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <code className="font-mono text-sm" dir="ltr">{code}</code>
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                  navigator.clipboard.writeText(code);
+                  toast({ title: 'تم نسخ الكود' });
+                }}>
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={() => {
+            navigator.clipboard.writeText(generatedCodes.join('\n'));
+            toast({ title: `تم نسخ ${generatedCodes.length} كود` });
+          }}>
+            <Copy className="w-4 h-4 ml-2" /> نسخ جميع الأكواد
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Requests Tab */}
+    {adminTab === 'requests' && (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold">طلبات الاشتراك</h2>
+        <div className="space-y-3">
+          {requests.map(req => (
+            <Card key={req.id} className={`p-4 ${bgCard}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="w-8 h-8 rounded-lg bg-[#FF7A00]/10 text-[#FF7A00] flex items-center justify-center text-sm font-bold shrink-0">
+                      {req.student?.name?.charAt(0) || '?'}
+                    </div>
+                    <div>
+                      <p className="font-medium">{req.student?.name || 'طالب'}</p>
+                      <p className={`text-xs ${textMuted}`}>{req.course?.title || 'كورس'}</p>
+                    </div>
+                  </div>
+                  {req.message && (
+                    <p className={`text-sm ${textSecondary} mt-2 mr-10`}>{req.message}</p>
+                  )}
+                  <div className={`flex items-center gap-3 text-xs ${textMuted} mt-2 mr-10`}>
+                    <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> <span dir="ltr">{req.whatsapp}</span></span>
+                    {req.code && <span className="flex items-center gap-1"><Key className="w-3 h-3" /> <code dir="ltr">{req.code}</code></span>}
+                    <span>{new Date(req.createdAt).toLocaleDateString('ar-EG')}</span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <Badge className={req.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
+                    req.status === 'approved' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}>
+                    {req.status === 'pending' ? 'معلق' : req.status === 'approved' ? 'مقبول' : 'مرفوض'}
+                  </Badge>
+                  {req.status === 'pending' && (
+                    <div className="flex gap-1">
+                      <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white h-7 text-xs px-2" onClick={() => handleUpdateRequest(req.id, 'approved')}>
+                        <CheckCircle className="w-3 h-3 ml-1" /> قبول
+                      </Button>
+                      <Button size="sm" variant="outline" className="border-red-500/30 text-red-500 hover:bg-red-500/10 h-7 text-xs px-2" onClick={() => handleUpdateRequest(req.id, 'rejected')}>
+                        <XCircle className="w-3 h-3 ml-1" /> رفض
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))}
+          {requests.length === 0 && (
+            <div className="text-center py-12">
+              <ClipboardList className={`w-12 h-12 mx-auto mb-3 ${textMuted}`} />
+              <p className={textSecondary}>لا توجد طلبات</p>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* Settings Tab */}
+    {adminTab === 'settings' && (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold">الإعدادات</h2>
+        <Card className={`p-6 ${bgCard}`}>
+          <div className="space-y-4">
+            <div>
+              <Label>اسم الموقع</Label>
+              <Input value={settings.siteName || ''} onChange={(e) => setSettings({...settings, siteName: e.target.value})} className={inputBg} />
+            </div>
+            <div>
+              <Label>وصف الموقع</Label>
+              <Textarea value={settings.siteDescription || ''} onChange={(e) => setSettings({...settings, siteDescription: e.target.value})} className={inputBg} />
+            </div>
+            <div>
+              <Label>رابط مجموعة واتساب</Label>
+              <Input value={settings.whatsappGroup || ''} onChange={(e) => setSettings({...settings, whatsappGroup: e.target.value})} className={inputBg} dir="ltr" placeholder="https://chat.whatsapp.com/..." />
+            </div>
+            <div>
+              <Label>رابط قناة تيليجرام</Label>
+              <Input value={settings.telegramChannel || ''} onChange={(e) => setSettings({...settings, telegramChannel: e.target.value})} className={inputBg} dir="ltr" placeholder="https://t.me/..." />
+            </div>
+            <div>
+              <Label>Bot Token تيليجرام (للإشعارات)</Label>
+              <Input value={settings.telegramBotToken || ''} onChange={(e) => setSettings({...settings, telegramBotToken: e.target.value})} className={inputBg} dir="ltr" />
+            </div>
+            <div>
+              <Label>Chat ID تيليجرام</Label>
+              <Input value={settings.telegramChatId || ''} onChange={(e) => setSettings({...settings, telegramChatId: e.target.value})} className={inputBg} dir="ltr" />
+            </div>
+            <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleSaveSettings}>
+              حفظ الإعدادات
+            </Button>
+          </div>
+        </Card>
+      </div>
+    )}
+  </>);
+
   return (
-    <div className={`min-h-screen flex flex-col ${bg} ${textPrimary} transition-colors duration-300`}>
+    <div className={`min-h-screen flex flex-col ${bg} ${textPrimary} transition-colors duration-300`} dir="rtl">
       {/* ========== NAVBAR ========== */}
       <nav className={`sticky top-0 z-50 backdrop-blur-xl ${darkMode ? 'bg-[#050505]/80 border-b border-[rgba(255,122,0,0.1)]' : 'bg-white/80 border-b border-gray-200'}`}>
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -736,6 +1437,18 @@ export default function WikiPlatform() {
 
             <Separator orientation="vertical" className="h-6 mx-1" />
 
+            {/* Admin Notification Bell */}
+            {admin && (
+              <div className="relative">
+                <Button variant="ghost" size="icon" onClick={() => { setShowInbox(!showInbox); }} className="rounded-full">
+                  <Bell className="w-4 h-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -left-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center animate-pulse">{unreadCount}</span>
+                  )}
+                </Button>
+              </div>
+            )}
+
             {/* Theme Toggle */}
             <Button variant="ghost" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-full">
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -758,7 +1471,17 @@ export default function WikiPlatform() {
           </div>
 
           {/* Mobile menu button */}
-          <div className="flex md:hidden items-center gap-2">
+          <div className="flex md:hidden items-center gap-1">
+            {admin && (
+              <div className="relative">
+                <Button variant="ghost" size="icon" onClick={() => { setShowInbox(!showInbox); }} className="rounded-full">
+                  <Bell className="w-4 h-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -left-1 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center animate-pulse">{unreadCount}</span>
+                  )}
+                </Button>
+              </div>
+            )}
             <Button variant="ghost" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-full">
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
@@ -803,6 +1526,73 @@ export default function WikiPlatform() {
           )}
         </AnimatePresence>
       </nav>
+
+      {/* ========== ADMIN INBOX POPUP ========== */}
+      <AnimatePresence>
+        {showInbox && admin && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className={`fixed top-16 left-4 md:left-auto md:right-4 z-[60] w-[calc(100%-2rem)] md:w-96 ${darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)]' : 'bg-white border-gray-200'} border rounded-2xl shadow-2xl overflow-hidden`}
+          >
+            <div className={`p-4 border-b ${borderColor} flex items-center justify-between`}>
+              <div className="flex items-center gap-2">
+                <Inbox className="w-5 h-5 text-[#FF7A00]" />
+                <h3 className="font-bold">صندوق البريد</h3>
+                {unreadCount > 0 && (
+                  <Badge className="bg-red-500 text-white text-xs">{unreadCount} جديد</Badge>
+                )}
+              </div>
+              <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => setShowInbox(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Inbox className={`w-12 h-12 mx-auto mb-3 ${textMuted}`} />
+                  <p className={textSecondary}>لا توجد طلبات جديدة</p>
+                </div>
+              ) : (
+                notifications.map((req: any) => (
+                  <div key={req.id} className={`p-4 border-b ${borderColor} ${darkMode ? 'hover:bg-white/5' : 'hover:bg-gray-50'} cursor-pointer transition-colors`} onClick={() => {
+                    setShowInbox(false);
+                    setCurrentPage('admin');
+                    setAdminTab('requests');
+                  }}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-[#FF7A00]/10 text-[#FF7A00] flex items-center justify-center text-sm font-bold shrink-0">
+                        {req.student?.name?.charAt(0) || '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{req.student?.name || 'طالب'}</p>
+                        <p className={`text-xs ${textMuted} truncate`}>{req.course?.title || 'كورس'}</p>
+                      </div>
+                      <Badge className="bg-yellow-500/20 text-yellow-500 text-[10px] shrink-0">معلق</Badge>
+                    </div>
+                    {req.message && (
+                      <p className={`text-xs ${textMuted} truncate mr-11`}>{req.message}</p>
+                    )}
+                    <p className={`text-[10px] ${textMuted} mt-1 mr-11`}>{new Date(req.createdAt).toLocaleString('ar-EG')}</p>
+                  </div>
+                ))
+              )}
+            </div>
+            {notifications.length > 0 && (
+              <div className={`p-3 border-t ${borderColor}`}>
+                <Button size="sm" className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={() => {
+                  setShowInbox(false);
+                  setCurrentPage('admin');
+                  setAdminTab('requests');
+                }}>
+                  عرض جميع الطلبات
+                </Button>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ========== MAIN CONTENT ========== */}
       <main className="flex-1">
@@ -1022,6 +1812,13 @@ export default function WikiPlatform() {
                     </Card>
                   ))}
               </div>
+
+              {courses.filter(c => c.title.includes(searchQuery) || c.description.includes(searchQuery)).length === 0 && (
+                <div className="text-center py-16">
+                  <Search className={`w-16 h-16 mx-auto mb-4 ${textMuted}`} />
+                  <p className={`text-lg ${textSecondary}`}>لا توجد نتائج</p>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1055,33 +1852,33 @@ export default function WikiPlatform() {
                       <h2 className="text-xl font-bold flex items-center gap-2">
                         <Video className="w-5 h-5 text-[#FF7A00]" /> الدروس ({selectedCourse.lessons?.length || 0})
                       </h2>
-                      {selectedCourse.lessons?.map((lesson, i) => {
+                      {selectedCourse.lessons?.sort((a, b) => a.order - b.order).map((lesson, i) => {
                         const canAccess = hasAccessToCourse(selectedCourse.id);
                         return (
-                          <Card
-                            key={lesson.id}
-                            className={`p-4 ${bgCard} ${canAccess ? 'cursor-pointer video-card-hover' : 'opacity-75'}`}
-                            onClick={() => canAccess ? navigateToLesson(lesson.id) : null}
+                          <Card key={lesson.id} className={`p-4 ${bgCard} ${canAccess ? 'cursor-pointer hover:border-[#FF7A00]/40 transition-colors' : 'opacity-70'} group`}
+                            onClick={() => canAccess ? navigateToLesson(lesson.id) : undefined}
                           >
                             <div className="flex items-center gap-4">
-                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${canAccess ? 'bg-[#FF7A00]/10 text-[#FF7A00]' : `${darkMode ? 'bg-white/5 text-white/30' : 'bg-gray-200 text-gray-400'}`}`}>
-                                {canAccess ? <Play className="w-5 h-5" /> : <Lock className="w-4 h-4" />}
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${canAccess ? 'bg-[#FF7A00]/10 text-[#FF7A00]' : `${bgSecondary} ${textMuted}`}`}>
+                                {canAccess ? <Play className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <h3 className={`font-medium ${canAccess ? '' : textSecondary}`}>{lesson.title}</h3>
-                                <div className={`flex items-center gap-3 text-sm ${textMuted} mt-1`}>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs ${textMuted}`}>{i + 1}.</span>
+                                  <h3 className="font-medium group-hover:text-[#FF7A00] transition-colors truncate">{lesson.title}</h3>
+                                </div>
+                                <div className={`flex items-center gap-2 text-xs ${textMuted} mt-1`}>
                                   {lesson.duration && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {lesson.duration}</span>}
-                                  <span className="flex items-center gap-1">
-                                    {lesson.videoType === 'youtube' ? 'يوتيوب' : lesson.videoType === 'upload' ? 'فيديو مرفوع' : 'رابط خارجي'}
-                                  </span>
+                                  <span>{lesson.videoType === 'youtube' ? 'يوتيوب' : lesson.videoType === 'upload' ? 'مرفوع' : 'رابط خارجي'}</span>
                                 </div>
                               </div>
-                              <div className={`text-sm ${textMuted}`}>#{i + 1}</div>
+                              {!canAccess && (
+                                <Lock className={`w-4 h-4 ${textMuted}`} />
+                              )}
                             </div>
                           </Card>
                         );
                       })}
-
                       {(!selectedCourse.lessons || selectedCourse.lessons.length === 0) && (
                         <div className="text-center py-12">
                           <Video className={`w-12 h-12 mx-auto mb-3 ${textMuted}`} />
@@ -1093,27 +1890,29 @@ export default function WikiPlatform() {
 
                   {/* Sidebar */}
                   <div className="space-y-4">
-                    <Card className={`p-6 ${bgCard}`}>
-                      <div className="text-center mb-4">
-                        <div className="text-3xl font-bold text-[#FF7A00]">{selectedCourse.price}</div>
-                        <p className={`text-sm ${textSecondary}`}>سعر الكورس</p>
+                    <Card className={`p-6 ${bgCard} sticky top-24`}>
+                      <div className="text-center mb-6">
+                        <Badge className="bg-[#FF7A00] text-black text-lg px-4 py-1 font-bold">{selectedCourse.price}</Badge>
                       </div>
-
                       {hasAccessToCourse(selectedCourse.id) ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2 text-green-500 text-sm">
-                            <CheckCircle className="w-4 h-4" /> أنت مشترك في هذا الكورس
+                        <div className="space-y-4">
+                          <div className={`p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-center`}>
+                            <p className="text-green-500 font-medium flex items-center justify-center gap-2">
+                              <Unlock className="w-4 h-4" /> أنت مشترك في هذا الكورس
+                            </p>
                           </div>
-                          <p className={`text-sm ${textSecondary}`}>
-                            ينتهي في: {new Date(activeCourses.find(ac => ac.courseId === selectedCourse.id)?.expiresAt || '').toLocaleDateString('ar-EG')}
-                          </p>
+                          {activeCourses.filter(ac => ac.courseId === selectedCourse.id).map(ac => (
+                            <p key={ac.courseId} className={`text-xs text-center ${textMuted}`}>
+                              ينتهي الاشتراك في {new Date(ac.expiresAt).toLocaleDateString('ar-EG')}
+                            </p>
+                          ))}
                         </div>
                       ) : (
                         <div className="space-y-3">
                           {student ? (
                             <>
-                              <div className="space-y-2">
-                                <Label className={textSecondary}>كود الاشتراك</Label>
+                              <div className={`p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-gray-50'}`}>
+                                <p className={`text-sm ${textSecondary} mb-2`}>لديك كود اشتراك؟</p>
                                 <div className="flex gap-2">
                                   <Input
                                     placeholder="XXXX-XXXX-XXXX-XXXX"
@@ -1122,50 +1921,31 @@ export default function WikiPlatform() {
                                     className={inputBg}
                                     dir="ltr"
                                   />
-                                  <Button
-                                    className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black shrink-0"
-                                    onClick={handleActivateKey}
-                                    disabled={loading || !accessCode.trim()}
-                                  >
-                                    <Key className="w-4 h-4" />
+                                  <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black shrink-0" onClick={handleActivateKey} disabled={loading || !accessCode.trim()}>
+                                    تفعيل
                                   </Button>
                                 </div>
                               </div>
-                              <Separator className={borderColor} />
-                              <Button
-                                variant="outline"
-                                className="w-full border-[#FF7A00]/30 text-[#FF7A00]"
-                                onClick={() => {
-                                  setRequestForm(prev => ({ ...prev, courseId: selectedCourse.id, whatsapp: student.whatsapp }));
-                                  setShowAccessRequest(true);
-                                }}
-                              >
-                                <Send className="w-4 h-4 ml-2" /> أرسل طلب اشتراك
+                              <Button className="w-full bg-gradient-to-r from-[#FF7A00] to-[#FF9D40] text-black font-bold" onClick={() => {
+                                setRequestForm({...requestForm, courseId: selectedCourse.id});
+                                setShowAccessRequest(true);
+                              }}>
+                                <Send className="w-4 h-4 ml-2" /> طلب اشتراك
                               </Button>
                             </>
                           ) : (
-                            <Button
-                              className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black font-bold"
-                              onClick={() => setShowRegister(true)}
-                            >
-                              <User className="w-4 h-4 ml-2" /> سجّل أولاً للوصول
+                            <Button className="w-full bg-gradient-to-r from-[#FF7A00] to-[#FF9D40] text-black font-bold" onClick={() => setShowRegister(true)}>
+                              <User className="w-4 h-4 ml-2" /> سجّل للاشتراك
                             </Button>
                           )}
                         </div>
                       )}
-
                       <Separator className={`my-4 ${borderColor}`} />
-
-                      <div className="space-y-2 text-sm">
-                        <div className={`flex items-center gap-2 ${textSecondary}`}>
-                          <Video className="w-4 h-4" /> {selectedCourse._count?.lessons || selectedCourse.lessons?.length || 0} درس
-                        </div>
-                        <div className={`flex items-center gap-2 ${textSecondary}`}>
-                          <Monitor className="w-4 h-4" /> مشاهدة من أي جهاز
-                        </div>
-                        <div className={`flex items-center gap-2 ${textSecondary}`}>
-                          <Clock className="w-4 h-4" /> متاح 24/7
-                        </div>
+                      <div className={`text-sm ${textSecondary} space-y-2`}>
+                        <p className="flex items-center gap-2"><Video className="w-4 h-4" /> {selectedCourse._count?.lessons || 0} درس</p>
+                        <p className="flex items-center gap-2"><Monitor className="w-4 h-4" /> مشاهدة من أي جهاز</p>
+                        <p className="flex items-center gap-2"><Clock className="w-4 h-4" /> متاح 24/7</p>
+                        <p className="flex items-center gap-2"><Smartphone className="w-4 h-4" /> دعم متعدد الأجهزة</p>
                       </div>
                     </Card>
                   </div>
@@ -1175,39 +1955,29 @@ export default function WikiPlatform() {
           )}
 
           {/* ===== LESSON PAGE ===== */}
-          {currentPage === 'lesson' && selectedLesson && (
+          {currentPage === 'lesson' && selectedLesson && selectedCourse && (
             <motion.div key={`lesson-${selectedLesson.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className={`border-b ${borderColor}`}>
-                <div className="max-w-7xl mx-auto px-4 py-4">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Button variant="ghost" size="sm" onClick={() => setCurrentPage('courses')} className={textSecondary}>
-                      الكورسات
-                    </Button>
-                    <ChevronLeft className={`w-4 h-4 ${textMuted}`} />
-                    <Button variant="ghost" size="sm" onClick={() => navigateToCourse(selectedLesson.courseId)} className={textSecondary}>
-                      {selectedCourse?.title}
-                    </Button>
-                    <ChevronLeft className={`w-4 h-4 ${textMuted}`} />
-                    <span className={textSecondary}>{selectedLesson.title}</span>
-                  </div>
+                <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setCurrentPage('courses')} className={textSecondary}>
+                    <ChevronRight className="w-4 h-4 ml-1" /> الكورسات
+                  </Button>
+                  <ChevronLeft className={`w-4 h-4 ${textMuted}`} />
+                  <Button variant="ghost" size="sm" onClick={() => setCurrentPage('course-detail')} className={textSecondary}>
+                    {selectedCourse.title}
+                  </Button>
                 </div>
               </div>
 
               <div className="max-w-5xl mx-auto px-4 py-8">
                 {/* Video Player */}
-                <div className="rounded-2xl overflow-hidden mb-6 bg-black aspect-video">
-                  {selectedLesson.videoType === 'youtube' && selectedLesson.videoUrl ? (
+                <div className="aspect-video bg-black rounded-2xl overflow-hidden mb-8">
+                  {selectedLesson.videoType === 'youtube' && getYouTubeId(selectedLesson.videoUrl || '') ? (
                     <iframe
-                      src={`https://www.youtube.com/embed/${getYouTubeId(selectedLesson.videoUrl)}`}
+                      src={`https://www.youtube.com/embed/${getYouTubeId(selectedLesson.videoUrl || '')}`}
                       className="w-full h-full"
                       allowFullScreen
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    />
-                  ) : selectedLesson.videoType === 'external' && selectedLesson.videoUrl ? (
-                    <iframe
-                      src={selectedLesson.videoUrl}
-                      className="w-full h-full"
-                      allowFullScreen
                     />
                   ) : selectedLesson.videoType === 'upload' && selectedLesson.filePath ? (
                     <video
@@ -1216,12 +1986,11 @@ export default function WikiPlatform() {
                       controls
                       controlsList="nodownload"
                     />
-                  ) : selectedLesson.videoUrl ? (
-                    <video
+                  ) : selectedLesson.videoType === 'external' && selectedLesson.videoUrl ? (
+                    <iframe
                       src={selectedLesson.videoUrl}
                       className="w-full h-full"
-                      controls
-                      controlsList="nodownload"
+                      allowFullScreen
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white/30">
@@ -1257,9 +2026,7 @@ export default function WikiPlatform() {
                         .filter(l => l.id !== selectedLesson.id)
                         .slice(0, 4)
                         .map(lesson => (
-                          <Card
-                            key={lesson.id}
-                            className={`p-3 ${bgCard} cursor-pointer video-card-hover`}
+                          <Card key={lesson.id} className={`p-3 ${bgCard} cursor-pointer hover:border-[#FF7A00]/40 transition-colors`}
                             onClick={() => navigateToLesson(lesson.id)}
                           >
                             <div className="flex items-center gap-3">
@@ -1267,7 +2034,7 @@ export default function WikiPlatform() {
                                 <Play className="w-4 h-4" />
                               </div>
                               <div className="min-w-0">
-                                <p className="font-medium truncate">{lesson.title}</p>
+                                <p className="font-medium text-sm truncate">{lesson.title}</p>
                                 {lesson.duration && <p className={`text-xs ${textMuted}`}>{lesson.duration}</p>}
                               </div>
                             </div>
@@ -1282,7 +2049,7 @@ export default function WikiPlatform() {
 
           {/* ===== PROFILE PAGE ===== */}
           {currentPage === 'profile' && student && (
-            <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0}} className="max-w-3xl mx-auto px-4 py-8">
+            <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-3xl mx-auto px-4 py-8">
               <Card className={`p-8 ${bgCard}`}>
                 <div className="text-center mb-8">
                   <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#FF7A00] to-[#FF9D40] flex items-center justify-center mx-auto mb-4">
@@ -1311,767 +2078,168 @@ export default function WikiPlatform() {
                   </Card>
                 </div>
 
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                  <Key className="w-5 h-5 text-[#FF7A00]" /> اشتراكاتي النشطة
-                </h2>
-
-                {activeCourses.length > 0 ? (
-                  <div className="space-y-3">
-                    {activeCourses.map((ac, i) => (
-                      <Card key={i} className={`p-4 ${bgSecondary}`}>
-                        <div className="flex items-center justify-between">
-                          <div>
+                {/* Active Courses */}
+                <div>
+                  <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-[#FF7A00]" /> كورساتي المشترك بها ({activeCourses.length})
+                  </h2>
+                  {activeCourses.length > 0 ? (
+                    <div className="space-y-3">
+                      {activeCourses.map((ac, i) => (
+                        <Card key={i} className={`p-4 ${bgSecondary}`}>
+                          <div className="flex items-center justify-between">
                             <p className="font-medium">{ac.courseTitle || 'كورس'}</p>
-                            <p className={`text-sm ${textMuted}`}>
-                              ينتهي: {new Date(ac.expiresAt).toLocaleDateString('ar-EG')}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-green-500/20 text-green-500 text-xs">نشط</Badge>
+                              <span className={`text-xs ${textMuted}`}>ينتهي {new Date(ac.expiresAt).toLocaleDateString('ar-EG')}</span>
+                            </div>
                           </div>
-                          <Badge className={new Date(ac.expiresAt) > new Date() ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}>
-                            {new Date(ac.expiresAt) > new Date() ? 'نشط' : 'منتهي'}
-                          </Badge>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Key className={`w-12 h-12 mx-auto mb-3 ${textMuted}`} />
-                    <p className={textSecondary}>لا توجد اشتراكات نشطة</p>
-                    <Button className="mt-4 bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={() => setCurrentPage('courses')}>
-                      تصفح الكورسات
-                    </Button>
-                  </div>
-                )}
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={`text-center py-8 ${bgSecondary} rounded-xl`}>
+                      <BookOpen className={`w-10 h-10 mx-auto mb-2 ${textMuted}`} />
+                      <p className={textSecondary}>لا توجد كورسات مشترك بها</p>
+                      <Button className="mt-3 bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={() => setCurrentPage('courses')}>
+                        تصفح الكورسات
+                      </Button>
+                    </div>
+                  )}
+                </div>
 
                 <Separator className={`my-6 ${borderColor}`} />
 
-                <div className="flex gap-3">
-                  <Button variant="outline" className="border-red-500/30 text-red-500 hover:bg-red-500/10" onClick={handleStudentLogout}>
-                    <LogOut className="w-4 h-4 ml-2" /> تسجيل الخروج
-                  </Button>
+                {/* Activate Key */}
+                <div>
+                  <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <Key className="w-5 h-5 text-[#FF7A00]" /> تفعيل كود
+                  </h2>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="XXXX-XXXX-XXXX-XXXX"
+                      value={accessCode}
+                      onChange={(e) => setAccessCode(e.target.value)}
+                      className={inputBg}
+                      dir="ltr"
+                    />
+                    <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black shrink-0" onClick={handleActivateKey} disabled={loading || !accessCode.trim()}>
+                      {loading ? 'جاري...' : 'تفعيل'}
+                    </Button>
+                  </div>
                 </div>
+
+                <Separator className={`my-6 ${borderColor}`} />
+
+                <Button variant="outline" className="w-full border-red-500/30 text-red-500 hover:bg-red-500/10" onClick={handleStudentLogout}>
+                  <LogOut className="w-4 h-4 ml-2" /> تسجيل الخروج
+                </Button>
               </Card>
             </motion.div>
           )}
 
           {/* ===== ADMIN PAGE ===== */}
-          {currentPage === 'admin' && (
-            <motion.div key="admin" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0}}>
-              {!admin ? (
-                <div className="max-w-md mx-auto px-4 py-20 text-center">
-                  <Lock className={`w-16 h-16 mx-auto mb-4 ${textMuted}`} />
-                  <h2 className="text-2xl font-bold mb-2">لوحة الأدمن</h2>
-                  <p className={textSecondary}>يجب تسجيل الدخول أولاً</p>
-                  <Button className="mt-4 bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={() => setShowAdminLogin(true)}>
-                    تسجيل دخول الأدمن
+          {currentPage === 'admin' && admin && (
+            <motion.div key="admin" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <div className="flex h-[calc(100vh-4rem)]">
+                {/* Desktop Sidebar */}
+                <aside className={`hidden md:flex flex-col w-64 shrink-0 ${darkMode ? 'bg-[#0a0a0a]' : 'bg-gray-100'} border-l ${borderColor} p-4`}>
+                  <div className="mb-6">
+                    <h2 className="font-bold text-lg flex items-center gap-2">
+                      <GraduationCap className="w-5 h-5 text-[#FF7A00]" /> لوحة التحكم
+                    </h2>
+                    <p className={`text-xs ${textMuted} mt-1`}>مرحباً، {admin.username}</p>
+                  </div>
+                  <div className="flex-1 flex flex-col gap-1">
+                    {adminTabs.map(tab => (
+                      <Button
+                        key={tab.id}
+                        variant="ghost"
+                        className={`w-full justify-start ${adminTab === tab.id ? 'bg-[#FF7A00]/10 text-[#FF7A00]' : ''}`}
+                        onClick={() => setAdminTab(tab.id)}
+                      >
+                        {tab.icon} <span className="mr-2">{tab.label}</span>
+                        {tab.id === 'requests' && unreadCount > 0 && (
+                          <Badge className="mr-auto bg-red-500 text-white text-xs">{unreadCount}</Badge>
+                        )}
+                      </Button>
+                    ))}
+                  </div>
+                  <Separator className={`my-4 ${borderColor}`} />
+                  <Button variant="ghost" className="w-full justify-start text-red-500" onClick={handleAdminLogout}>
+                    <LogOut className="w-4 h-4" /> <span className="mr-2">تسجيل الخروج</span>
                   </Button>
-                </div>
-              ) : (
-                <div className="flex min-h-[calc(100vh-4rem)]">
-                  {/* Admin Sidebar */}
-                  <aside className={`w-64 shrink-0 ${darkMode ? 'bg-[#0a0a0a]' : 'bg-gray-100'} border-l ${borderColor} hidden md:block`}>
-                    <div className="p-4">
-                      <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-                        <Settings className="w-5 h-5 text-[#FF7A00]" /> لوحة التحكم
-                      </h2>
-                      <div className="space-y-1">
-                        {[
-                          { id: 'dashboard', icon: <BarChart3 className="w-4 h-4" />, label: 'الإحصائيات' },
-                          { id: 'courses', icon: <BookOpen className="w-4 h-4" />, label: 'الكورسات' },
-                          { id: 'lessons', icon: <Video className="w-4 h-4" />, label: 'الدروس' },
-                          { id: 'students', icon: <Users className="w-4 h-4" />, label: 'الطلاب' },
-                          { id: 'keys', icon: <Key className="w-4 h-4" />, label: 'المفاتيح' },
-                          { id: 'requests', icon: <ClipboardList className="w-4 h-4" />, label: 'الطلبات' },
-                          { id: 'settings', icon: <Settings className="w-4 h-4" />, label: 'الإعدادات' },
-                        ].map(tab => (
-                          <Button
-                            key={tab.id}
-                            variant="ghost"
-                            className={`w-full justify-start ${adminTab === tab.id ? 'bg-[#FF7A00]/10 text-[#FF7A00]' : ''}`}
-                            onClick={() => setAdminTab(tab.id)}
-                          >
-                            {tab.icon} <span className="mr-2">{tab.label}</span>
-                            {tab.id === 'requests' && dashboardData?.stats?.requests > 0 && (
-                              <Badge className="mr-auto bg-red-500 text-white text-xs">{dashboardData.stats.requests}</Badge>
-                            )}
-                          </Button>
-                        ))}
-                      </div>
-                      <Separator className={`my-4 ${borderColor}`} />
-                      <Button variant="ghost" className="w-full justify-start text-red-500" onClick={handleAdminLogout}>
-                        <LogOut className="w-4 h-4" /> <span className="mr-2">تسجيل الخروج</span>
+                </aside>
+
+                {/* Mobile Admin Layout */}
+                <div className="md:hidden flex flex-col w-full h-[calc(100vh-4rem)]">
+                  {/* Mobile admin header */}
+                  <div className={`${darkMode ? 'bg-[#0a0a0a]' : 'bg-gray-100'} border-b ${borderColor} px-4 py-3 flex items-center justify-between`}>
+                    <h2 className="font-bold flex items-center gap-2">
+                      {adminTabs.filter(t => t.id === adminTab)[0]?.icon}
+                      <span>{adminTabs.filter(t => t.id === adminTab)[0]?.label}</span>
+                      {adminTab === 'requests' && unreadCount > 0 && (
+                        <Badge className="bg-red-500 text-white text-xs">{unreadCount}</Badge>
+                      )}
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="icon" className="text-red-500 w-8 h-8" onClick={handleAdminLogout}>
+                        <LogOut className="w-4 h-4" />
                       </Button>
                     </div>
-                  </aside>
-
-                  {/* Mobile admin tabs */}
-                  <div className="md:hidden w-full">
-                    <div className={`overflow-x-auto ${darkMode ? 'bg-[#0a0a0a]' : 'bg-gray-100'} border-b ${borderColor} p-2`}>
-                      <div className="flex gap-1 min-w-max">
-                        {[
-                          { id: 'dashboard', icon: <BarChart3 className="w-3 h-3" />, label: 'إحصائيات' },
-                          { id: 'courses', icon: <BookOpen className="w-3 h-3" />, label: 'كورسات' },
-                          { id: 'lessons', icon: <Video className="w-3 h-3" />, label: 'دروس' },
-                          { id: 'students', icon: <Users className="w-3 h-3" />, label: 'طلاب' },
-                          { id: 'keys', icon: <Key className="w-3 h-3" />, label: 'مفاتيح' },
-                          { id: 'requests', icon: <ClipboardList className="w-3 h-3" />, label: 'طلبات' },
-                          { id: 'settings', icon: <Settings className="w-3 h-3" />, label: 'إعدادات' },
-                        ].map(tab => (
-                          <Button
-                            key={tab.id}
-                            size="sm"
-                            variant={adminTab === tab.id ? 'default' : 'ghost'}
-                            className={adminTab === tab.id ? 'bg-[#FF7A00] text-black' : ''}
-                            onClick={() => setAdminTab(tab.id)}
-                          >
-                            {tab.icon} <span className="mr-1 text-xs">{tab.label}</span>
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
                   </div>
 
-                  {/* Admin Content */}
-                  <div className="flex-1 p-4 md:p-8 overflow-y-auto max-h-[calc(100vh-4rem)]">
-                    {/* Dashboard Tab */}
-                    {adminTab === 'dashboard' && dashboardData && (
-                      <div className="space-y-6">
-                        <h2 className="text-2xl font-bold">الإحصائيات</h2>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                          {[
-                            { label: 'الكورسات', value: dashboardData.stats.courses, icon: <BookOpen className="w-5 h-5" />, color: '#FF7A00' },
-                            { label: 'الدروس', value: dashboardData.stats.lessons, icon: <Video className="w-5 h-5" />, color: '#4ade80' },
-                            { label: 'الطلاب', value: dashboardData.stats.students, icon: <Users className="w-5 h-5" />, color: '#60a5fa' },
-                            { label: 'المفاتيح', value: dashboardData.stats.keys, icon: <Key className="w-5 h-5" />, color: '#f87171' },
-                            { label: 'طلبات معلقة', value: dashboardData.stats.requests, icon: <Bell className="w-5 h-5" />, color: '#fbbf24' },
-                            { label: 'اشتراكات نشطة', value: dashboardData.stats.activeKeys, icon: <Wifi className="w-5 h-5" />, color: '#34d399' },
-                          ].map((stat, i) => (
-                            <Card key={i} className={`p-4 ${bgCard}`}>
-                              <div className="flex items-center gap-2 mb-2" style={{ color: stat.color }}>
-                                {stat.icon}
-                              </div>
-                              <div className="text-2xl font-bold">{stat.value}</div>
-                              <div className={`text-sm ${textMuted}`}>{stat.label}</div>
-                            </Card>
-                          ))}
-                        </div>
+                  {/* Mobile admin content - scrollable with bottom padding for nav bar */}
+                  <div className="flex-1 overflow-y-auto p-4 pb-20">
+                    {renderAdminContent()}
+                  </div>
 
-                        {/* Recent Requests */}
-                        {dashboardData.recentRequests?.length > 0 && (
-                          <div>
-                            <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
-                              <Bell className="w-5 h-5 text-[#FF7A00]" /> آخر الطلبات
-                            </h3>
-                            <div className="space-y-2">
-                              {dashboardData.recentRequests.map((req: AccessRequest) => (
-                                <Card key={req.id} className={`p-3 ${bgCard}`}>
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <span className="font-medium">{req.student?.name}</span>
-                                      <span className={`text-sm mr-2 ${textMuted}`}>— {req.course?.title}</span>
-                                    </div>
-                                    <Badge className={req.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
-                                      req.status === 'approved' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}>
-                                      {req.status === 'pending' ? 'معلق' : req.status === 'approved' ? 'مقبول' : 'مرفوض'}
-                                    </Badge>
-                                  </div>
-                                </Card>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Courses Tab */}
-                    {adminTab === 'courses' && (
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <h2 className="text-2xl font-bold">إدارة الكورسات</h2>
-                          <Dialog open={showAddCourse} onOpenChange={setShowAddCourse}>
-                            <DialogTrigger asChild>
-                              <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black">
-                                <Plus className="w-4 h-4 ml-2" /> إضافة كورس
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className={darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}>
-                              <DialogHeader>
-                                <DialogTitle>إضافة كورس جديد</DialogTitle>
-                              <DialogDescription className="sr-only">نموذج إضافة كورس جديد</DialogDescription>
-                              </DialogHeader>
-                              <div className="space-y-4 mt-4">
-                                <div>
-                                  <Label>اسم الكورس</Label>
-                                  <Input value={courseForm.title} onChange={(e) => setCourseForm({...courseForm, title: e.target.value})} className={inputBg} />
-                                </div>
-                                <div>
-                                  <Label>الوصف</Label>
-                                  <Textarea value={courseForm.description} onChange={(e) => setCourseForm({...courseForm, description: e.target.value})} className={inputBg} />
-                                </div>
-                                <div>
-                                  <Label>رابط الصورة</Label>
-                                  <Input value={courseForm.image} onChange={(e) => setCourseForm({...courseForm, image: e.target.value})} className={inputBg} dir="ltr" />
-                                </div>
-                                <div>
-                                  <Label>السعر</Label>
-                                  <Input value={courseForm.price} onChange={(e) => setCourseForm({...courseForm, price: e.target.value})} className={inputBg} />
-                                </div>
-                                <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleAddCourse} disabled={loading}>
-                                  {loading ? 'جاري الإضافة...' : 'إضافة الكورس'}
-                                </Button>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-
-                        <div className="space-y-3">
-                          {courses.map(course => (
-                            <Card key={course.id} className={`p-4 ${bgCard}`}>
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <h3 className="font-bold">{course.title}</h3>
-                                    <Badge variant="outline" className="text-xs">{course.price}</Badge>
-                                    {!course.active && <Badge className="bg-red-500/20 text-red-500 text-xs">معطل</Badge>}
-                                  </div>
-                                  <p className={`text-sm ${textSecondary} truncate`}>{course.description}</p>
-                                  <div className={`flex items-center gap-3 text-xs ${textMuted} mt-1`}>
-                                    <span>{course._count?.lessons || 0} درس</span>
-                                    <span>{course._count?.keys || 0} مفتاح</span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <Button size="icon" variant="ghost" className="text-[#FF7A00]" onClick={() => { setEditingCourse(course); setCourseForm({ title: course.title, description: course.description, image: course.image || '', price: course.price }); setShowEditCourse(true); }}>
-                                    <Edit3 className="w-4 h-4" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className="text-red-500" onClick={() => handleDeleteCourse(course.id)}>
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Edit Course Dialog */}
-                    <Dialog open={showEditCourse} onOpenChange={setShowEditCourse}>
-                      <DialogContent className={darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}>
-                        <DialogHeader><DialogTitle>تعديل الكورس</DialogTitle><DialogDescription className="sr-only">نموذج تعديل بيانات الكورس</DialogDescription></DialogHeader>
-                        <div className="space-y-4 mt-4">
-                          <div><Label>اسم الكورس</Label><Input value={courseForm.title} onChange={(e) => setCourseForm({...courseForm, title: e.target.value})} className={inputBg} /></div>
-                          <div><Label>الوصف</Label><Textarea value={courseForm.description} onChange={(e) => setCourseForm({...courseForm, description: e.target.value})} className={inputBg} /></div>
-                          <div><Label>رابط الصورة</Label><Input value={courseForm.image} onChange={(e) => setCourseForm({...courseForm, image: e.target.value})} className={inputBg} dir="ltr" /></div>
-                          <div><Label>السعر</Label><Input value={courseForm.price} onChange={(e) => setCourseForm({...courseForm, price: e.target.value})} className={inputBg} /></div>
-                          <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleEditCourse} disabled={loading}>
-                            {loading ? 'جاري التعديل...' : 'حفظ التعديلات'}
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-
-                    {/* Lessons Tab */}
-                    {adminTab === 'lessons' && (
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <h2 className="text-2xl font-bold">إدارة الدروس</h2>
-                          <Dialog open={showAddLesson} onOpenChange={setShowAddLesson}>
-                            <DialogTrigger asChild>
-                              <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black">
-                                <Plus className="w-4 h-4 ml-2" /> إضافة درس
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className={`max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}`}>
-                              <DialogHeader><DialogTitle>إضافة درس جديد</DialogTitle><DialogDescription className="sr-only">نموذج إضافة درس جديد بالفيديو</DialogDescription></DialogHeader>
-                              <div className="space-y-4 mt-4">
-                                <div><Label>عنوان الدرس</Label><Input value={lessonForm.title} onChange={(e) => setLessonForm({...lessonForm, title: e.target.value})} className={inputBg} /></div>
-                                <div><Label>الوصف</Label><Textarea value={lessonForm.description} onChange={(e) => setLessonForm({...lessonForm, description: e.target.value})} className={inputBg} /></div>
-                                <div>
-                                  <Label>الكورس</Label>
-                                  <Select value={lessonForm.courseId} onValueChange={(v) => setLessonForm({...lessonForm, courseId: v})}>
-                                    <SelectTrigger className={inputBg}><SelectValue placeholder="اختر الكورس" /></SelectTrigger>
-                                    <SelectContent>
-                                      {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div>
-                                  <Label>نوع الفيديو</Label>
-                                  <Select value={lessonForm.videoType} onValueChange={(v) => setLessonForm({...lessonForm, videoType: v})}>
-                                    <SelectTrigger className={inputBg}><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="youtube">يوتيوب</SelectItem>
-                                      <SelectItem value="external">رابط خارجي</SelectItem>
-                                      <SelectItem value="upload">رفع فيديو</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                {lessonForm.videoType !== 'upload' ? (
-                                  <div>
-                                    <Label>رابط الفيديو</Label>
-                                    <Input value={lessonForm.videoUrl} onChange={(e) => setLessonForm({...lessonForm, videoUrl: e.target.value})} className={inputBg} dir="ltr" placeholder="https://..." />
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <Label>رفع فيديو</Label>
-                                    <div className={`border-2 border-dashed ${borderColor} rounded-xl p-8 text-center`}>
-                                      {uploading ? (
-                                        <div className="space-y-3">
-                                          <RefreshCw className="w-8 h-8 mx-auto text-[#FF7A00] animate-spin" />
-                                          <p className="text-sm">جاري الرفع... {uploadProgress}%</p>
-                                          <Progress value={uploadProgress} className="h-2" />
-                                        </div>
-                                      ) : lessonForm.videoUrl ? (
-                                        <div className="space-y-2">
-                                          <CheckCircle className="w-8 h-8 mx-auto text-green-500" />
-                                          <p className="text-sm text-green-500">تم رفع الفيديو بنجاح</p>
-                                          <Button size="sm" variant="outline" onClick={() => setLessonForm({...lessonForm, videoUrl: ''})}>إعادة الرفع</Button>
-                                        </div>
-                                      ) : (
-                                        <label className="cursor-pointer">
-                                          <Upload className="w-8 h-8 mx-auto text-[#FF7A00] mb-2" />
-                                          <p className={`text-sm ${textSecondary}`}>اضغط لاختيار فيديو</p>
-                                          <p className={`text-xs ${textMuted}`}>MP4, MOV, AVI — حتى 500MB</p>
-                                          <input type="file" accept="video/*" className="hidden" onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) handleVideoUpload(file);
-                                          }} />
-                                        </label>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div><Label>الترتيب</Label><Input type="number" value={lessonForm.order} onChange={(e) => setLessonForm({...lessonForm, order: parseInt(e.target.value) || 0})} className={inputBg} /></div>
-                                  <div><Label>المدة</Label><Input value={lessonForm.duration} onChange={(e) => setLessonForm({...lessonForm, duration: e.target.value})} className={inputBg} placeholder="مثال: 15:30" /></div>
-                                </div>
-                                <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleAddLesson} disabled={loading || uploading}>
-                                  {loading ? 'جاري الإضافة...' : 'إضافة الدرس'}
-                                </Button>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-
-                        {/* Lessons list */}
-                        <div className="space-y-3">
-                          {courses.flatMap(c => (c.lessons || []).map(l => ({ ...l, courseName: c.title }))).sort((a, b) => a.order - b.order).map(lesson => (
-                            <Card key={lesson.id} className={`p-4 ${bgCard}`}>
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <Video className={`w-4 h-4 ${lesson.videoType === 'youtube' ? 'text-red-500' : lesson.videoType === 'upload' ? 'text-green-500' : 'text-blue-500'}`} />
-                                    <h3 className="font-medium truncate">{lesson.title}</h3>
-                                    {!lesson.active && <Badge className="bg-red-500/20 text-red-500 text-xs">معطل</Badge>}
-                                  </div>
-                                  <p className={`text-sm ${textMuted} mt-1`}>
-                                    {lesson.courseName} • {lesson.videoType === 'youtube' ? 'يوتيوب' : lesson.videoType === 'upload' ? 'مرفوع' : 'رابط خارجي'}
-                                    {lesson.duration ? ` • ${lesson.duration}` : ''}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <Button size="icon" variant="ghost" className="text-[#FF7A00]" onClick={() => {
-                                    setEditingLesson(lesson);
-                                    setLessonForm({
-                                      title: lesson.title, description: lesson.description || '', videoType: lesson.videoType,
-                                      videoUrl: lesson.videoUrl || lesson.filePath || '', courseId: lesson.courseId,
-                                      order: lesson.order, duration: lesson.duration || ''
-                                    });
-                                    setShowEditLesson(true);
-                                  }}>
-                                    <Edit3 className="w-4 h-4" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className="text-red-500" onClick={() => handleDeleteLesson(lesson.id)}>
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Edit Lesson Dialog */}
-                    <Dialog open={showEditLesson} onOpenChange={setShowEditLesson}>
-                      <DialogContent className={`max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}`}>
-                        <DialogHeader><DialogTitle>تعديل الدرس</DialogTitle><DialogDescription className="sr-only">نموذج تعديل بيانات الدرس</DialogDescription></DialogHeader>
-                        <div className="space-y-4 mt-4">
-                          <div><Label>عنوان الدرس</Label><Input value={lessonForm.title} onChange={(e) => setLessonForm({...lessonForm, title: e.target.value})} className={inputBg} /></div>
-                          <div><Label>الوصف</Label><Textarea value={lessonForm.description} onChange={(e) => setLessonForm({...lessonForm, description: e.target.value})} className={inputBg} /></div>
-                          <div>
-                            <Label>نوع الفيديو</Label>
-                            <Select value={lessonForm.videoType} onValueChange={(v) => setLessonForm({...lessonForm, videoType: v})}>
-                              <SelectTrigger className={inputBg}><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="youtube">يوتيوب</SelectItem>
-                                <SelectItem value="external">رابط خارجي</SelectItem>
-                                <SelectItem value="upload">رفع فيديو</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {lessonForm.videoType !== 'upload' ? (
-                            <div><Label>رابط الفيديو</Label><Input value={lessonForm.videoUrl} onChange={(e) => setLessonForm({...lessonForm, videoUrl: e.target.value})} className={inputBg} dir="ltr" /></div>
-                          ) : (
-                            <div>
-                              <Label>رفع فيديو جديد</Label>
-                              <div className={`border-2 border-dashed ${borderColor} rounded-xl p-6 text-center`}>
-                                {uploading ? (
-                                  <div className="space-y-2">
-                                    <RefreshCw className="w-6 h-6 mx-auto text-[#FF7A00] animate-spin" />
-                                    <Progress value={uploadProgress} className="h-2" />
-                                    <p className="text-xs">جاري الرفع... {uploadProgress}%</p>
-                                  </div>
-                                ) : (
-                                  <label className="cursor-pointer">
-                                    <Upload className="w-6 h-6 mx-auto text-[#FF7A00] mb-1" />
-                                    <p className="text-xs">اضغط لاختيار فيديو</p>
-                                    <input type="file" accept="video/*" className="hidden" onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) handleVideoUpload(file);
-                                    }} />
-                                  </label>
-                                )}
-                              </div>
-                              {lessonForm.videoUrl && <p className="text-xs text-green-500 mt-2">الفيديو الحالي محفوظ</p>}
-                            </div>
+                  {/* Mobile Bottom Navigation Bar */}
+                  <div className={`fixed bottom-0 left-0 right-0 z-50 ${darkMode ? 'bg-[#0a0a0a]/95' : 'bg-white/95'} backdrop-blur-xl border-t ${borderColor}`}>
+                    <div className="grid grid-cols-7 h-16">
+                      {adminTabs.map(tab => (
+                        <button
+                          key={tab.id}
+                          className={`flex flex-col items-center justify-center gap-0.5 relative ${adminTab === tab.id ? 'text-[#FF7A00]' : textMuted} active:scale-95 transition-transform`}
+                          onClick={() => setAdminTab(tab.id)}
+                        >
+                          {tab.icon}
+                          <span className="text-[10px] leading-tight">{tab.label}</span>
+                          {tab.id === 'requests' && unreadCount > 0 && (
+                            <span className="absolute top-1 right-1/4 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
                           )}
-                          <div className="grid grid-cols-2 gap-4">
-                            <div><Label>الترتيب</Label><Input type="number" value={lessonForm.order} onChange={(e) => setLessonForm({...lessonForm, order: parseInt(e.target.value) || 0})} className={inputBg} /></div>
-                            <div><Label>المدة</Label><Input value={lessonForm.duration} onChange={(e) => setLessonForm({...lessonForm, duration: e.target.value})} className={inputBg} /></div>
-                          </div>
-                          <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleEditLesson} disabled={loading || uploading}>
-                            {loading ? 'جاري التعديل...' : 'حفظ التعديلات'}
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-
-                    {/* Students Tab */}
-                    {adminTab === 'students' && (
-                      <div className="space-y-6">
-                        <h2 className="text-2xl font-bold">إدارة الطلاب ({students.length})</h2>
-                        <div className="space-y-3">
-                          {students.map(s => (
-                            <Card key={s.id} className={`p-4 ${bgCard}`}>
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-lg bg-[#FF7A00]/10 text-[#FF7A00] flex items-center justify-center text-sm font-bold">
-                                      {s.name.charAt(0)}
-                                    </div>
-                                    <div>
-                                      <p className="font-medium">{s.name}</p>
-                                      <p className={`text-xs ${textMuted}`} dir="ltr">{s.phone}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3 text-xs">
-                                  <span className={`flex items-center gap-1 ${textMuted}`}>
-                                    <MessageSquare className="w-3 h-3" /> {s.stage || '—'}
-                                  </span>
-                                  <span className={`flex items-center gap-1 ${textMuted}`}>
-                                    <Key className="w-3 h-3" /> {s._count?.activations || 0}
-                                  </span>
-                                </div>
-                              </div>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Keys Tab */}
-                    {adminTab === 'keys' && (
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <h2 className="text-2xl font-bold">إدارة المفاتيح</h2>
-                          <Dialog open={showAddKey} onOpenChange={setShowAddKey}>
-                            <DialogTrigger asChild>
-                              <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black">
-                                <Plus className="w-4 h-4 ml-2" /> إنشاء مفتاح
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className={darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}>
-                              <DialogHeader><DialogTitle>إنشاء مفتاح جديد</DialogTitle><DialogDescription className="sr-only">نموذج إنشاء مفتاح اشتراك</DialogDescription></DialogHeader>
-                              <div className="space-y-4 mt-4">
-                                <div>
-                                  <Label>الكورس</Label>
-                                  <Select value={keyForm.courseId} onValueChange={(v) => setKeyForm({...keyForm, courseId: v})}>
-                                    <SelectTrigger className={inputBg}><SelectValue placeholder="اختر الكورس" /></SelectTrigger>
-                                    <SelectContent>
-                                      {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <Label>عدد الأجهزة</Label>
-                                    <Input type="number" min={1} max={10} value={keyForm.maxDevices} onChange={(e) => setKeyForm({...keyForm, maxDevices: parseInt(e.target.value) || 1})} className={inputBg} />
-                                  </div>
-                                  <div>
-                                    <Label>مدة الاشتراك (أيام)</Label>
-                                    <Input type="number" min={1} value={keyForm.durationDays} onChange={(e) => setKeyForm({...keyForm, durationDays: parseInt(e.target.value) || 30})} className={inputBg} />
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label>الكود (اختياري — يتم توليده تلقائياً)</Label>
-                                  <Input value={keyForm.code} onChange={(e) => setKeyForm({...keyForm, code: e.target.value})} className={inputBg} dir="ltr" placeholder="XXXX-XXXX-XXXX-XXXX" />
-                                </div>
-                                <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleAddKey} disabled={loading}>
-                                  {loading ? 'جاري الإنشاء...' : 'إنشاء المفتاح'}
-                                </Button>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-
-                        <div className="space-y-3">
-                          {keys.map(key => (
-                            <Card key={key.id} className={`p-4 ${bgCard}`}>
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <code className="text-sm font-mono bg-[#FF7A00]/10 text-[#FF7A00] px-2 py-0.5 rounded" dir="ltr">{key.code}</code>
-                                    {key.active ? (
-                                      <Badge className="bg-green-500/20 text-green-500 text-xs">نشط</Badge>
-                                    ) : (
-                                      <Badge className="bg-red-500/20 text-red-500 text-xs">معطل</Badge>
-                                    )}
-                                  </div>
-                                  <p className={`text-sm ${textMuted}`}>
-                                    {key.course?.title} • {key.maxDevices} جهاز • {key.durationDays} يوم
-                                  </p>
-                                  <p className={`text-xs ${textMuted}`}>
-                                    مفعل: {key.activations?.filter(a => new Date(a.expiresAt) > new Date()).length || 0} / {key.maxDevices}
-                                  </p>
-                                  {key.activations && key.activations.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-2">
-                                      {key.activations.filter(a => new Date(a.expiresAt) > new Date()).map(a => (
-                                        <Badge key={a.id} variant="outline" className="text-xs">
-                                          {a.student?.name} — {new Date(a.expiresAt).toLocaleDateString('ar-EG')}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <Button size="icon" variant="ghost" className="text-[#FF7A00]" onClick={async () => {
-                                    await navigator.clipboard.writeText(key.code);
-                                    toast({ title: 'تم نسخ الكود' });
-                                  }}>
-                                    <Copy className="w-4 h-4" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className={key.active ? 'text-red-500' : 'text-green-500'} onClick={async () => {
-                                    await fetch(`/api/keys`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...key, active: !key.active }) });
-                                    loadAdminData();
-                                  }}>
-                                    {key.active ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                                  </Button>
-                                </div>
-                              </div>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Requests Tab */}
-                    {adminTab === 'requests' && (
-                      <div className="space-y-6">
-                        <h2 className="text-2xl font-bold flex items-center gap-2">
-                          <ClipboardList className="w-6 h-6 text-[#FF7A00]" /> طلبات الاشتراك
-                        </h2>
-                        <div className="space-y-3">
-                          {requests.map(req => (
-                            <Card key={req.id} className={`p-4 ${bgCard} ${req.status === 'pending' ? 'border-yellow-500/30' : ''}`}>
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-[#FF7A00]/10 text-[#FF7A00] flex items-center justify-center font-bold">
-                                      {req.student?.name?.charAt(0)}
-                                    </div>
-                                    <div>
-                                      <p className="font-bold">{req.student?.name}</p>
-                                      <p className={`text-xs ${textMuted}`}>{req.course?.title}</p>
-                                    </div>
-                                  </div>
-                                  <Badge className={req.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
-                                    req.status === 'approved' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}>
-                                    {req.status === 'pending' ? '⏳ معلق' : req.status === 'approved' ? '✅ مقبول' : '❌ مرفوض'}
-                                  </Badge>
-                                </div>
-
-                                <div className={`grid grid-cols-2 md:grid-cols-4 gap-2 text-sm ${textSecondary}`}>
-                                  <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {req.student?.phone}</span>
-                                  <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" /> {req.whatsapp}</span>
-                                  <span className="flex items-center gap-1"><GraduationCap className="w-3 h-3" /> {req.student?.stage}</span>
-                                  <span className="flex items-center gap-1"><Key className="w-3 h-3" /> {req.code || '—'}</span>
-                                </div>
-
-                                {req.message && (
-                                  <p className={`text-sm ${textMuted} bg-black/10 rounded-lg p-2`}>{req.message}</p>
-                                )}
-
-                                <div className="flex items-center justify-between">
-                                  <span className={`text-xs ${textMuted}`}>{new Date(req.createdAt).toLocaleString('ar-EG')}</span>
-                                  {req.status === 'pending' && (
-                                    <div className="flex gap-2">
-                                      <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleUpdateRequest(req.id, 'approved')}>
-                                        <CheckCircle className="w-3 h-3 ml-1" /> قبول
-                                      </Button>
-                                      <Button size="sm" variant="outline" className="border-red-500/30 text-red-500" onClick={() => handleUpdateRequest(req.id, 'rejected')}>
-                                        <XCircle className="w-3 h-3 ml-1" /> رفض
-                                      </Button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </Card>
-                          ))}
-
-                          {requests.length === 0 && (
-                            <div className="text-center py-12">
-                              <ClipboardList className={`w-12 h-12 mx-auto mb-3 ${textMuted}`} />
-                              <p className={textSecondary}>لا توجد طلبات</p>
-                            </div>
+                          {adminTab === tab.id && (
+                            <span className="absolute bottom-0 w-8 h-0.5 bg-[#FF7A00] rounded-full" />
                           )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Settings Tab */}
-                    {adminTab === 'settings' && (
-                      <div className="space-y-6">
-                        <h2 className="text-2xl font-bold">الإعدادات</h2>
-
-                        <Card className={`p-6 ${bgCard}`}>
-                          <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                            <Smartphone className="w-5 h-5 text-[#FF7A00]" /> بوت التليجرام
-                          </h3>
-                          <p className={`text-sm ${textSecondary} mb-4`}>
-                            اربط بوت التليجرام لاستقبال إشعارات الطلبات الجديدة مباشرة
-                          </p>
-                          <div className="space-y-4">
-                            <div>
-                              <Label>Bot Token</Label>
-                              <Input
-                                value={settings.telegram_bot_token || ''}
-                                onChange={(e) => setSettings({...settings, telegram_bot_token: e.target.value})}
-                                className={inputBg}
-                                dir="ltr"
-                                placeholder="123456:ABC-DEF..."
-                              />
-                            </div>
-                            <div>
-                              <Label>Chat ID</Label>
-                              <Input
-                                value={settings.telegram_chat_id || ''}
-                                onChange={(e) => setSettings({...settings, telegram_chat_id: e.target.value})}
-                                className={inputBg}
-                                dir="ltr"
-                                placeholder="-1001234567890"
-                              />
-                            </div>
-                            <div className="flex gap-2">
-                              <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleSaveSettings}>
-                                حفظ الإعدادات
-                              </Button>
-                              <Button variant="outline" className={borderColor} onClick={async () => {
-                                if (!settings.telegram_bot_token || !settings.telegram_chat_id) {
-                                  toast({ title: 'خطأ', description: 'أدخل بيانات التليجرام أولاً', variant: 'destructive' });
-                                  return;
-                                }
-                                try {
-                                  const res = await fetch('/api/telegram', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      botToken: settings.telegram_bot_token,
-                                      chatId: settings.telegram_chat_id,
-                                      message: '✅ *رسالة تجريبية*\n\nتم ربط بوت التليجرام بنجاح!'
-                                    })
-                                  });
-                                  const data = await res.json();
-                                  if (data.success) toast({ title: 'تم إرسال رسالة تجريبية' });
-                                  else toast({ title: 'خطأ', description: data.error, variant: 'destructive' });
-                                } catch (e) {
-                                  toast({ title: 'خطأ', description: 'فشل الاتصال', variant: 'destructive' });
-                                }
-                              }}>
-                                <Send className="w-4 h-4 ml-2" /> رسالة تجريبية
-                              </Button>
-                            </div>
-                          </div>
-                        </Card>
-
-                        <Card className={`p-6 ${bgCard}`}>
-                          <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                            <Settings className="w-5 h-5 text-[#FF7A00]" /> إعدادات عامة
-                          </h3>
-                          <div className="space-y-4">
-                            <div>
-                              <Label>اسم المنصة</Label>
-                              <Input
-                                value={settings.site_name || ''}
-                                onChange={(e) => setSettings({...settings, site_name: e.target.value})}
-                                className={inputBg}
-                                placeholder="ويكي فيزياء"
-                              />
-                            </div>
-                            <div>
-                              <Label>رقم واتساب الدعم</Label>
-                              <Input
-                                value={settings.support_whatsapp || ''}
-                                onChange={(e) => setSettings({...settings, support_whatsapp: e.target.value})}
-                                className={inputBg}
-                                dir="ltr"
-                                placeholder="+201000000000"
-                              />
-                            </div>
-                            <Button className="bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleSaveSettings}>
-                              حفظ الإعدادات
-                            </Button>
-                          </div>
-                        </Card>
-
-                        <Card className={`p-6 ${bgCard}`}>
-                          <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                            <User className="w-5 h-5 text-[#FF7A00]" /> حساب الأدمن
-                          </h3>
-                          <p className={`text-sm ${textSecondary} mb-2`}>
-                            اسم المستخدم الحالي: <strong>{admin?.username}</strong>
-                          </p>
-                          <p className={`text-xs ${textMuted}`}>
-                            يمكنك تغيير كلمة المرور من خلال إعادة إنشاء حساب أدمن جديد
-                          </p>
-                        </Card>
-                      </div>
-                    )}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Safe area bottom for iPhone notch */}
+                    <div className="safe-area-bottom" />
                   </div>
                 </div>
-              )}
+
+                {/* Desktop Admin Content */}
+                <div className="hidden md:block flex-1 p-4 md:p-8 overflow-y-auto max-h-[calc(100vh-4rem)]">
+                  {renderAdminContent()}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ===== NOT FOUND / FALLBACK ===== */}
+          {!['home', 'courses', 'course-detail', 'lesson', 'admin', 'profile'].includes(currentPage) && (
+            <motion.div key="fallback" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto px-4 py-20 text-center">
+              <AlertCircle className={`w-16 h-16 mx-auto mb-4 ${textMuted}`} />
+              <h2 className="text-2xl font-bold mb-2">الصفحة غير موجودة</h2>
+              <p className={textSecondary}>الصفحة المطلوبة غير متاحة</p>
+              <Button className="mt-4 bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={() => setCurrentPage('home')}>
+                <Home className="w-4 h-4 ml-2" /> الرجوع للرئيسية
+              </Button>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
-
-      {/* ========== FOOTER ========== */}
-      <footer className={`border-t ${borderColor} mt-auto`}>
-        <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-[#FF7A00]" />
-            <span className="font-bold">ويكي فيزياء</span>
-          </div>
-          <p className={`text-sm ${textMuted}`}>© {new Date().getFullYear()} ويكي فيزياء — جميع الحقوق محفوظة</p>
-          {settings.support_whatsapp && (
-            <a href={`https://wa.me/${settings.support_whatsapp.replace(/[^0-9+]/g, '')}`} target="_blank" className="flex items-center gap-2 text-sm text-green-500 hover:underline">
-              <MessageSquare className="w-4 h-4" /> تواصل معنا
-            </a>
-          )}
-        </div>
-      </footer>
 
       {/* ========== DIALOGS ========== */}
 
@@ -2079,54 +2247,36 @@ export default function WikiPlatform() {
       <Dialog open={showRegister} onOpenChange={setShowRegister}>
         <DialogContent className={`sm:max-w-md ${darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}`}>
           <DialogHeader>
-            <DialogTitle className="text-center text-xl">تسجيل الدخول</DialogTitle>
+            <DialogTitle className="text-center">تسجيل طالب جديد</DialogTitle>
           </DialogHeader>
-          <DialogDescription className="sr-only">نموذج تسجيل دخول الطالب</DialogDescription>
+          <DialogDescription className="sr-only">نموذج تسجيل طالب جديد في المنصة</DialogDescription>
           <div className="space-y-4 mt-4">
             <div>
               <Label>الاسم الكامل</Label>
-              <Input
-                value={studentForm.name}
-                onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
-                className={inputBg}
-                placeholder="أدخل اسمك"
-              />
+              <Input value={studentForm.name} onChange={(e) => setStudentForm({...studentForm, name: e.target.value})} className={inputBg} placeholder="أدخل اسمك" />
             </div>
             <div>
               <Label>رقم الهاتف</Label>
-              <Input
-                value={studentForm.phone}
-                onChange={(e) => setStudentForm({...studentForm, phone: e.target.value})}
-                className={inputBg}
-                dir="ltr"
-                placeholder="01xxxxxxxxx"
-              />
+              <Input value={studentForm.phone} onChange={(e) => setStudentForm({...studentForm, phone: e.target.value})} className={inputBg} dir="ltr" placeholder="01xxxxxxxxx" />
             </div>
             <div>
-              <Label>رقم الواتساب</Label>
-              <Input
-                value={studentForm.whatsapp}
-                onChange={(e) => setStudentForm({...studentForm, whatsapp: e.target.value})}
-                className={inputBg}
-                dir="ltr"
-                placeholder="01xxxxxxxxx"
-              />
+              <Label>رقم واتساب</Label>
+              <Input value={studentForm.whatsapp} onChange={(e) => setStudentForm({...studentForm, whatsapp: e.target.value})} className={inputBg} dir="ltr" placeholder="01xxxxxxxxx" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>المرحلة التعليمية</Label>
+                <Label>المرحلة</Label>
                 <Select value={studentForm.stage} onValueChange={(v) => setStudentForm({...studentForm, stage: v})}>
                   <SelectTrigger className={inputBg}><SelectValue placeholder="اختر" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="الإعدادية">الإعدادية</SelectItem>
-                    <SelectItem value="الثانوية">الثانوية</SelectItem>
-                    <SelectItem value="الجامعة">الجامعة</SelectItem>
+                    <SelectItem value="ثانوي">ثانوي</SelectItem>
+                    <SelectItem value="جامعي">جامعي</SelectItem>
                     <SelectItem value="أخرى">أخرى</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>السنة الدراسية</Label>
+                <Label>السنة</Label>
                 <Select value={studentForm.year} onValueChange={(v) => setStudentForm({...studentForm, year: v})}>
                   <SelectTrigger className={inputBg}><SelectValue placeholder="اختر" /></SelectTrigger>
                   <SelectContent>
@@ -2160,28 +2310,28 @@ export default function WikiPlatform() {
           <div className="space-y-4 mt-4">
             <div>
               <Label>اسم المستخدم</Label>
-              <Input 
-                value={adminForm.username} 
-                onChange={(e) => setAdminForm({...adminForm, username: e.target.value})} 
-                className={inputBg} 
+              <Input
+                value={adminForm.username}
+                onChange={(e) => setAdminForm({...adminForm, username: e.target.value})}
+                className={inputBg}
                 placeholder="admin"
                 autoComplete="username"
               />
             </div>
             <div>
               <Label>كلمة المرور</Label>
-              <Input 
-                type="password" 
-                value={adminForm.password} 
-                onChange={(e) => setAdminForm({...adminForm, password: e.target.value})} 
-                className={inputBg} 
+              <Input
+                type="password"
+                value={adminForm.password}
+                onChange={(e) => setAdminForm({...adminForm, password: e.target.value})}
+                className={inputBg}
                 placeholder="••••••"
                 autoComplete="current-password"
               />
             </div>
-            <Button 
-              className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black font-bold" 
-              onClick={handleAdminLogin} 
+            <Button
+              className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black font-bold"
+              onClick={handleAdminLogin}
               disabled={loading || !adminForm.username || !adminForm.password}
             >
               {loading ? 'جاري الدخول...' : 'تسجيل الدخول'}
