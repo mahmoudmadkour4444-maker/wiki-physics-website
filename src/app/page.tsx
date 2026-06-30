@@ -35,6 +35,7 @@ interface Course {
   description: string;
   image?: string | null;
   price: string;
+  stage: string;
   order: number;
   active: boolean;
   createdAt: string;
@@ -59,13 +60,27 @@ interface Lesson {
 interface Student {
   id: string;
   name: string;
+  username: string;
   phone: string;
   whatsapp: string;
   stage: string;
-  year: string;
   fingerprint?: string | null;
   createdAt: string;
   _count?: { sessions: number; requests: number; activations: number };
+}
+
+interface InboxMessage {
+  id: string;
+  studentId: string;
+  title: string;
+  body: string;
+  type: string;
+  courseId?: string | null;
+  keyId?: string | null;
+  code?: string | null;
+  read: boolean;
+  createdAt: string;
+  course?: { title: string } | null;
 }
 
 interface AccessKey {
@@ -199,6 +214,11 @@ export default function WikiPlatform() {
   const [showInbox, setShowInbox] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Student inbox
+  const [studentInbox, setStudentInbox] = useState<InboxMessage[]>([]);
+  const [showStudentInbox, setShowStudentInbox] = useState(false);
+  const [studentUnreadCount, setStudentUnreadCount] = useState(0);
+
   // Batch key generation
   const [batchKeyCount, setBatchKeyCount] = useState(1);
   const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
@@ -222,9 +242,10 @@ export default function WikiPlatform() {
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
 
   // Form states
-  const [studentForm, setStudentForm] = useState({ name: '', phone: '', whatsapp: '', stage: '', year: '' });
+  const [studentForm, setStudentForm] = useState({ name: '', username: '', password: '', phone: '', whatsapp: '', stage: 'أولى' });
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [adminForm, setAdminForm] = useState({ username: '', password: '' });
-  const [courseForm, setCourseForm] = useState({ title: '', description: '', image: '', price: 'مجاني' });
+  const [courseForm, setCourseForm] = useState({ title: '', description: '', image: '', price: 'مجاني', stage: 'أولى' });
   const [lessonForm, setLessonForm] = useState({ title: '', description: '', videoType: 'youtube', videoUrl: '', courseId: '', order: 0, duration: '' });
   const [keyForm, setKeyForm] = useState({ courseId: '', maxDevices: 1, durationDays: 30, code: '' });
   const [requestForm, setRequestForm] = useState({ courseId: '', code: '', whatsapp: '', message: '' });
@@ -275,7 +296,23 @@ export default function WikiPlatform() {
       if (data.authenticated) {
         setStudent(data.student);
         setActiveCourses(data.activeCourses || []);
+        // Load student inbox
+        loadStudentInbox(data.student.id);
       }
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const loadStudentInbox = useCallback(async (sid: string) => {
+    try {
+      const res = await fetch(`/api/inbox?studentId=${sid}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setStudentInbox(data);
+        setStudentUnreadCount(data.filter((m: InboxMessage) => !m.read).length);
+      }
+      const countRes = await fetch(`/api/inbox?studentId=${sid}&action=unread`);
+      const countData = await countRes.json();
+      if (typeof countData.count === 'number') setStudentUnreadCount(countData.count);
     } catch (e) { console.error(e); }
   }, []);
 
@@ -382,7 +419,7 @@ export default function WikiPlatform() {
       const res = await fetch('/api/students/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...studentForm, fingerprint, deviceInfo: navigator.userAgent.slice(0, 100) })
+        body: JSON.stringify({ action: 'register', ...studentForm, fingerprint, deviceInfo: navigator.userAgent.slice(0, 100) })
       });
       const data = await res.json();
       if (data.success) {
@@ -390,6 +427,31 @@ export default function WikiPlatform() {
         setActiveCourses(data.activeCourses || []);
         setShowRegister(false);
         toast({ title: 'تم التسجيل بنجاح', description: `مرحباً ${data.student.name}` });
+        loadStudentInbox(data.student.id);
+      } else {
+        toast({ title: 'خطأ', description: data.error, variant: 'destructive' });
+      }
+    } catch (e) {
+      toast({ title: 'خطأ', description: 'حدث خطأ في الاتصال', variant: 'destructive' });
+    }
+    setLoading(false);
+  };
+
+  const handleStudentLogin = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/students/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', ...loginForm, fingerprint, deviceInfo: navigator.userAgent.slice(0, 100) })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStudent(data.student);
+        setActiveCourses(data.activeCourses || []);
+        setShowStudentLogin(false);
+        toast({ title: 'تم تسجيل الدخول', description: `مرحباً ${data.student.name}` });
+        loadStudentInbox(data.student.id);
       } else {
         toast({ title: 'خطأ', description: data.error, variant: 'destructive' });
       }
@@ -429,7 +491,7 @@ export default function WikiPlatform() {
       const data = await res.json();
       if (data.id) {
         setShowAddCourse(false);
-        setCourseForm({ title: '', description: '', image: '', price: 'مجاني' });
+        setCourseForm({ title: '', description: '', image: '', price: 'مجاني', stage: 'أولى' });
         loadAdminData();
         toast({ title: 'تم إضافة الكورس بنجاح' });
       } else {
@@ -755,6 +817,32 @@ export default function WikiPlatform() {
   const borderColor = darkMode ? 'border-[rgba(255,122,0,0.18)]' : 'border-gray-200';
   const inputBg = darkMode ? 'bg-white/5 border-white/10 text-white' : 'bg-white border-gray-300 text-gray-900';
 
+  // ===== DEVELOPER SIGNATURE COMPONENT =====
+  const DevSignature = () => (
+    <div className={`py-4 border-t ${darkMode ? 'border-white/5' : 'border-gray-200'}`}>
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1.5 text-xs">
+          <ShieldCheck className="w-3.5 h-3.5 text-[#FF7A00]" />
+          <span className={textMuted}>تم التطوير بواسطة</span>
+        </div>
+        <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
+          <a href="https://t.me/MCV_M" target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-[#FF7A00]/10 text-[#FF7A00] border border-[#FF7A00]/20 hover:bg-[#FF7A00]/20 transition-colors">
+            <span>dev:</span><span className="font-bold">Mahmoud</span>
+            <span className="text-white/30">|</span><span>t.me/MCV_M</span>
+            <span className="text-white/30">|</span><span>WS:@MCV_M</span>
+          </a>
+          <a href="https://t.me/MCV_W" target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-[#FF7A00]/10 text-[#FF7A00] border border-[#FF7A00]/20 hover:bg-[#FF7A00]/20 transition-colors">
+            <span>dev:</span><span className="font-bold">Youdef Emad</span>
+            <span className="text-white/30">|</span><span>t.me/MCV_W</span>
+            <span className="text-white/30">|</span><span>WS:@MCV_W</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+
   // Admin tab config
   const adminTabs = [
     { id: 'dashboard', icon: <BarChart3 className="w-5 h-5" />, label: 'إحصائيات' },
@@ -880,6 +968,17 @@ export default function WikiPlatform() {
                 <div>
                   <Label>السعر</Label>
                   <Input value={courseForm.price} onChange={(e) => setCourseForm({...courseForm, price: e.target.value})} className={inputBg} />
+                </div>
+                <div>
+                  <Label>المرحلة الدراسية</Label>
+                  <Select value={courseForm.stage} onValueChange={(v) => setCourseForm({...courseForm, stage: v})}>
+                    <SelectTrigger className={inputBg}><SelectValue placeholder="اختر المرحلة" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="أولى">أولى ثانوي</SelectItem>
+                      <SelectItem value="ثانية">ثانية ثانوي</SelectItem>
+                      <SelectItem value="ثالثة">ثالثة ثانوي</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleAddCourse} disabled={loading}>
                   {loading ? 'جاري الإضافة...' : 'إضافة الكورس'}
@@ -1450,6 +1549,18 @@ export default function WikiPlatform() {
               </div>
             )}
 
+            {/* Student Inbox Bell */}
+            {student && !admin && (
+              <div className="relative">
+                <Button variant="ghost" size="icon" onClick={() => { setShowStudentInbox(!showStudentInbox); }} className="rounded-full">
+                  <Inbox className="w-4 h-4" />
+                  {studentUnreadCount > 0 && (
+                    <span className="absolute -top-1 -left-1 w-5 h-5 bg-[#FF7A00] text-black text-xs rounded-full flex items-center justify-center animate-pulse font-bold">{studentUnreadCount}</span>
+                  )}
+                </Button>
+              </div>
+            )}
+
             {/* Theme Toggle */}
             <Button variant="ghost" size="icon" onClick={() => setDarkMode(!darkMode)} className="rounded-full">
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -1465,9 +1576,14 @@ export default function WikiPlatform() {
                 </Button>
               </>
             ) : (
-              <Button variant="ghost" size="sm" onClick={() => setShowRegister(true)} className="text-[#FF7A00]">
-                <User className="w-4 h-4 ml-1" /> تسجيل دخول
-              </Button>
+              <>
+                <Button variant="ghost" size="sm" onClick={() => setShowStudentLogin(true)} className="text-[#FF7A00]">
+                  <User className="w-4 h-4 ml-1" /> دخول
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowRegister(true)} className="border-[#FF7A00]/30 text-[#FF7A00]">
+                  تسجيل
+                </Button>
+              </>
             )}
           </div>
 
@@ -1479,6 +1595,16 @@ export default function WikiPlatform() {
                   <Bell className="w-4 h-4" />
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -left-1 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center animate-pulse">{unreadCount}</span>
+                  )}
+                </Button>
+              </div>
+            )}
+            {student && !admin && (
+              <div className="relative">
+                <Button variant="ghost" size="icon" onClick={() => { setShowStudentInbox(!showStudentInbox); }} className="rounded-full">
+                  <Inbox className="w-4 h-4" />
+                  {studentUnreadCount > 0 && (
+                    <span className="absolute -top-1 -left-1 w-4 h-4 bg-[#FF7A00] text-black text-[10px] rounded-full flex items-center justify-center animate-pulse font-bold">{studentUnreadCount}</span>
                   )}
                 </Button>
               </div>
@@ -1518,9 +1644,14 @@ export default function WikiPlatform() {
                     </Button>
                   </>
                 ) : (
-                  <Button variant="ghost" className="justify-start text-[#FF7A00]" onClick={() => { setShowRegister(true); setMobileMenuOpen(false); }}>
-                    <User className="w-4 h-4 ml-2" /> تسجيل دخول
-                  </Button>
+                  <>
+                    <Button variant="ghost" className="justify-start text-[#FF7A00]" onClick={() => { setShowStudentLogin(true); setMobileMenuOpen(false); }}>
+                      <User className="w-4 h-4 ml-2" /> تسجيل دخول
+                    </Button>
+                    <Button variant="ghost" className="justify-start" onClick={() => { setShowRegister(true); setMobileMenuOpen(false); }}>
+                      <User className="w-4 h-4 ml-2" /> حساب جديد
+                    </Button>
+                  </>
                 )}
               </div>
             </motion.div>
@@ -1595,50 +1726,116 @@ export default function WikiPlatform() {
         )}
       </AnimatePresence>
 
+      {/* ========== STUDENT INBOX POPUP ========== */}
+      <AnimatePresence>
+        {showStudentInbox && student && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={`fixed top-16 left-4 md:left-auto md:right-4 z-50 w-[calc(100%-2rem)] md:w-96 ${bgCard} rounded-2xl border shadow-2xl overflow-hidden`}
+          >
+            <div className="p-4 border-b border-[#FF7A00]/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Inbox className="w-5 h-5 text-[#FF7A00]" />
+                <h3 className="font-bold">صندوق البريد</h3>
+              </div>
+              <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => setShowStudentInbox(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {studentInbox.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Inbox className={`w-10 h-10 mx-auto mb-3 ${textMuted}`} />
+                  <p className={`text-sm ${textSecondary}`}>لا توجد رسائل</p>
+                </div>
+              ) : (
+                studentInbox.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`p-4 border-b ${darkMode ? 'border-white/5' : 'border-gray-100'} cursor-pointer hover:bg-[#FF7A00]/5 transition-colors ${!msg.read ? 'bg-[#FF7A00]/5' : ''}`}
+                    onClick={async () => {
+                      if (!msg.read) {
+                        await fetch('/api/inbox', {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ messageId: msg.id })
+                        });
+                        if (student.id) loadStudentInbox(student.id);
+                      }
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.type === 'key_code' ? 'bg-green-500/20 text-green-500' : 'bg-[#FF7A00]/20 text-[#FF7A00]'}`}>
+                        {msg.type === 'key_code' ? <Key className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-bold ${!msg.read ? '' : textSecondary}`}>{msg.title}</span>
+                          {!msg.read && <span className="w-2 h-2 rounded-full bg-[#FF7A00] shrink-0" />}
+                        </div>
+                        <p className={`text-xs ${textMuted} mt-1 line-clamp-2`}>{msg.body}</p>
+                        {msg.code && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <code className="bg-[#FF7A00]/10 text-[#FF7A00] px-2 py-1 rounded text-xs font-bold font-mono tracking-wider" dir="ltr">{msg.code}</code>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(msg.code || '');
+                              toast({ title: 'تم نسخ الكود' });
+                            }}>
+                              <Copy className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )}
+                        <p className={`text-[10px] ${textMuted} mt-1`}>{new Date(msg.createdAt).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ========== MAIN CONTENT ========== */}
       <main className="flex-1">
         <AnimatePresence mode="wait">
           {/* ===== HOME PAGE ===== */}
           {currentPage === 'home' && (
-            <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="relative">
 
               {/* ===== HERO SECTION ===== */}
-              <section className="relative overflow-hidden min-h-[100vh] flex items-center">
-                {/* Einstein Background Image */}
-                <div className="absolute inset-0">
+              <section className="relative overflow-hidden min-h-[100svh] flex flex-col justify-center py-20 md:py-0">
+                {/* Mobile: Einstein as background */}
+                <div className="md:hidden absolute inset-0">
                   <img
-                    src="/einstein-bg.jpg"
+                    src="/einstein-original.jpg"
                     alt=""
-                    className="w-full h-full object-contain object-center"
+                    className="w-full h-full object-cover object-top"
                   />
-                  {/* Dark overlay */}
-                  <div className="absolute inset-0 bg-black/60" />
-                  <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/40 via-[#050505]/60 to-[#050505]" />
+                  {/* Gradient overlay - same as original ::before */}
+                  <div className="absolute inset-0 z-[1]" style={{
+                    background: [
+                      'linear-gradient(to top, rgba(5,5,5,1) 0%, rgba(5,5,5,0.92) 25%, rgba(5,5,5,0.55) 55%, rgba(5,5,5,0.15) 80%, transparent 100%)',
+                      'linear-gradient(to right, rgba(5,5,5,0.5) 0%, transparent 50%)',
+                      'linear-gradient(to left, rgba(5,5,5,0.5) 0%, transparent 50%)'
+                    ].join(',')
+                  }} />
                 </div>
-                {/* Background effects */}
-                <div className="absolute inset-0 grid-pattern opacity-30" />
-                <div className="absolute inset-0 radial-glow" />
-                {/* Floating particles */}
-                <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  {[...Array(6)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="floating-particle"
-                      style={{
-                        left: `${10 + i * 15}%`,
-                        top: `${20 + (i % 3) * 25}%`,
-                        animationDelay: `${i * 1.5}s`,
-                      }}
-                    />
-                  ))}
-                </div>
-                {/* Glow orbs */}
-                <div className="absolute top-20 right-10 w-72 h-72 bg-[#FF7A00]/10 rounded-full blur-[100px] animate-pulse" />
-                <div className="absolute bottom-20 left-10 w-96 h-96 bg-[#FF7A00]/5 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1.5s' }} />
 
-                <div className="relative max-w-7xl mx-auto px-4 py-20 md:py-32 w-full text-center">
+                {/* Background grid + radial */}
+                <div className="absolute inset-0 pointer-events-none z-0">
+                  <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(255,122,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,122,0,0.04) 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+                  <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[700px] h-[700px]" style={{ background: 'radial-gradient(circle, rgba(255,122,0,0.08) 0%, transparent 65%)' }} />
+                </div>
+
+                {/* Main hero content - grid layout */}
+                <div className="relative z-[2] max-w-[1100px] mx-auto w-full grid grid-cols-1 md:grid-cols-[1fr_400px] gap-10 items-center px-5">
                   {/* Text Content */}
                   <motion.div
+                    className="relative z-[2] md:py-20 pt-24 pb-16 md:pb-20 text-center md:text-right"
                     initial={{ y: 40, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
@@ -1647,111 +1844,87 @@ export default function WikiPlatform() {
                       initial={{ y: -10, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.2 }}
-                      className="inline-flex items-center gap-2 mb-6"
+                      className="inline-flex items-center gap-2 mb-8"
                     >
-                      <Badge className="bg-[#FF7A00]/20 text-[#FF7A00] border-[#FF7A00]/30 px-4 py-1.5 text-sm backdrop-blur-sm">
-                        <Rocket className="w-4 h-4 ml-1" /> منصة تعليمية متطورة
-                      </Badge>
+                      <span className="w-1.5 h-1.5 bg-[#FF7A00] rounded-full animate-pulse" />
+                      <span className="text-[#FF7A00] text-xs font-medium border border-[#FF7A00]/18 rounded-full px-3.5 py-1.5 bg-[#FF7A00]/12">منصة الفيزياء الأولى بالعربي</span>
                     </motion.div>
 
                     <motion.h1
-                      className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight text-white"
+                      className="text-[clamp(34px,8vw,72px)] font-black leading-[1.15] tracking-tight mb-6 text-white"
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.3, duration: 0.6 }}
                     >
-                      تعلّم الفيزياء
+                      افهم الفيزياء
                       <br />
-                      بـ<span className="orange-gradient-text"> طريقة مختلفة</span>
+                      <em className="not-italic text-[#FF7A00]">بطريقة مختلفة</em>
                     </motion.h1>
 
                     <motion.p
-                      className="text-lg md:text-xl text-white/70 max-w-2xl mx-auto mb-8 leading-relaxed"
+                      className="text-[clamp(15px,2.5vw,18px)] text-white/70 max-w-[520px] leading-[1.85] mb-11 mx-auto md:mx-0 md:mr-0"
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.5, duration: 0.6 }}
                     >
-                      منصة ويكي فيزياء التعليمية المتخصصة في الفيزياء للطالب العربي — مبنية على الفهم الحقيقي لا الحفظ.
-                      كورسات مع شروحات فيديو تفاعلية ومتابعة مستمرة من أفضل المدرسين.
+                      منصة تعليمية متخصصة في الفيزياء، تعيد بناء الفهم الحقيقي للمادة من الأساس — بأسلوب واضح وعميق ومصمم للطالب العربي.
                     </motion.p>
 
                     <motion.div
-                      className="flex flex-col sm:flex-row gap-4 justify-center"
+                      className="flex flex-wrap gap-3.5 justify-center md:justify-start"
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.7, duration: 0.6 }}
                     >
                       <Button
                         size="lg"
-                        className="bg-gradient-to-r from-[#FF7A00] to-[#FF9D40] hover:from-[#FF8A10] hover:to-[#FFAD50] text-black font-bold px-8 glow-orange text-lg h-14"
+                        className="bg-[#FF7A00] hover:bg-[#FF8A10] text-[#050505] font-bold px-7 h-12 text-[15px] rounded-xl"
                         onClick={() => setCurrentPage('courses')}
                       >
-                        <BookOpen className="w-5 h-5 ml-2" /> تصفح الكورسات
+                        ابدأ التعلم الآن
                       </Button>
                       {!student && (
                         <Button
                           size="lg"
                           variant="outline"
-                          className="border-white/20 text-white hover:bg-white/10 px-8 h-14 text-lg backdrop-blur-sm"
+                          className="border-white/15 text-white/80 hover:border-[#FF7A00] hover:text-[#FF7A00] hover:bg-[#FF7A00]/10 px-7 h-12 text-[15px] rounded-xl"
                           onClick={() => setShowRegister(true)}
                         >
-                          <User className="w-5 h-5 ml-2" /> سجّل الآن مجاناً
+                          سجّل الآن مجاناً
                         </Button>
                       )}
                     </motion.div>
-
-                    {/* Floating physics formulas */}
-                    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                      <motion.div
-                        className="absolute top-[15%] right-[8%] bg-[#FF7A00]/90 text-black px-4 py-2 rounded-xl text-sm font-bold shadow-lg backdrop-blur-sm"
-                        animate={{ y: [0, -12, 0] }}
-                        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-                      >
-                        E = mc²
-                      </motion.div>
-                      <motion.div
-                        className="absolute bottom-[25%] left-[6%] bg-black/60 border border-[#FF7A00]/40 text-[#FF7A00] px-4 py-2 rounded-xl text-sm font-bold shadow-lg backdrop-blur-sm"
-                        animate={{ y: [0, 10, 0] }}
-                        transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-                      >
-                        F = ma
-                      </motion.div>
-                      <motion.div
-                        className="absolute top-[40%] left-[10%] bg-black/50 border border-white/10 text-white/70 px-3 py-1.5 rounded-lg text-xs font-mono backdrop-blur-sm"
-                        animate={{ y: [0, -8, 0] }}
-                        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-                      >
-                        ΔxΔp ≥ ℏ/2
-                      </motion.div>
-                      <motion.div
-                        className="absolute bottom-[15%] right-[12%] bg-black/50 border border-white/10 text-white/70 px-3 py-1.5 rounded-lg text-xs font-mono backdrop-blur-sm"
-                        animate={{ y: [0, 8, 0] }}
-                        transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
-                      >
-                        PV = nRT
-                      </motion.div>
-                    </div>
-
-                    {/* Mini stats under CTA */}
-                    <motion.div
-                      className="flex items-center gap-6 mt-12 justify-center"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 1 }}
-                    >
-                      <div className="flex -space-x-2 space-x-reverse">
-                        {[1,2,3,4].map(n => (
-                          <div key={n} className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FF7A00] to-[#FF9D40] border-2 border-black flex items-center justify-center text-black text-xs font-bold">
-                            {n}
-                          </div>
-                        ))}
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-white">+500 طالب</div>
-                        <div className="text-xs text-white/50">انضموا هذا الشهر</div>
-                      </div>
-                    </motion.div>
                   </motion.div>
+
+                  {/* Desktop: Scientist Photo Column (hidden on mobile) */}
+                  <div className="hidden md:flex relative h-[500px] items-end justify-center">
+                    <div className="relative w-full h-full flex items-end justify-center">
+                      {/* Glow behind */}
+                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[340px] h-[200px] z-[3] pointer-events-none" style={{ background: 'radial-gradient(ellipse, rgba(255,122,0,0.13) 0%, transparent 70%)', animation: 'scientist-breathe 4s ease-in-out infinite' }} />
+                      {/* Einstein Photo */}
+                      <motion.img
+                        src="/einstein-original.jpg"
+                        alt="ألبرت آينشتاين"
+                        className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] h-full object-cover object-top z-[1] rounded-none"
+                        style={{
+                          mixBlendMode: 'luminosity',
+                          filter: 'brightness(0.82) contrast(1.08) saturate(0.55) sepia(0.18) drop-shadow(0 0 40px rgba(255,122,0,0.22)) drop-shadow(0 0 12px rgba(255,122,0,0.10))'
+                        }}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
+                      />
+                      {/* Fade Mask - blends photo into dark background */}
+                      <div className="absolute inset-0 z-[2]" style={{
+                        background: [
+                          'linear-gradient(to top, #050505 0%, transparent 22%)',
+                          'linear-gradient(to right, #050505 0%, transparent 18%)',
+                          'linear-gradient(to left, #050505 0%, transparent 18%)',
+                          'linear-gradient(to bottom, #050505 0%, transparent 12%)'
+                        ].join(',')
+                      }} />
+                    </div>
+                  </div>
                 </div>
               </section>
 
@@ -2664,6 +2837,8 @@ export default function WikiPlatform() {
             </motion.div>
           )}
         </AnimatePresence>
+        {/* Developer Signature - shown on all pages */}
+        <DevSignature />
       </main>
 
       {/* ========== DIALOGS ========== */}
@@ -2681,6 +2856,14 @@ export default function WikiPlatform() {
               <Input value={studentForm.name} onChange={(e) => setStudentForm({...studentForm, name: e.target.value})} className={inputBg} placeholder="أدخل اسمك" />
             </div>
             <div>
+              <Label>اسم المستخدم</Label>
+              <Input value={studentForm.username} onChange={(e) => setStudentForm({...studentForm, username: e.target.value})} className={inputBg} dir="ltr" placeholder="مثال: ahmed2024" />
+            </div>
+            <div>
+              <Label>كلمة المرور</Label>
+              <Input value={studentForm.password} onChange={(e) => setStudentForm({...studentForm, password: e.target.value})} className={inputBg} dir="ltr" type="password" placeholder="أدخل كلمة المرور" />
+            </div>
+            <div>
               <Label>رقم الهاتف</Label>
               <Input value={studentForm.phone} onChange={(e) => setStudentForm({...studentForm, phone: e.target.value})} className={inputBg} dir="ltr" placeholder="01xxxxxxxxx" />
             </div>
@@ -2688,39 +2871,61 @@ export default function WikiPlatform() {
               <Label>رقم واتساب</Label>
               <Input value={studentForm.whatsapp} onChange={(e) => setStudentForm({...studentForm, whatsapp: e.target.value})} className={inputBg} dir="ltr" placeholder="01xxxxxxxxx" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>المرحلة</Label>
-                <Select value={studentForm.stage} onValueChange={(v) => setStudentForm({...studentForm, stage: v})}>
-                  <SelectTrigger className={inputBg}><SelectValue placeholder="اختر" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ثانوي">ثانوي</SelectItem>
-                    <SelectItem value="جامعي">جامعي</SelectItem>
-                    <SelectItem value="أخرى">أخرى</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>السنة</Label>
-                <Select value={studentForm.year} onValueChange={(v) => setStudentForm({...studentForm, year: v})}>
-                  <SelectTrigger className={inputBg}><SelectValue placeholder="اختر" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="الأولى">الأولى</SelectItem>
-                    <SelectItem value="الثانية">الثانية</SelectItem>
-                    <SelectItem value="الثالثة">الثالثة</SelectItem>
-                    <SelectItem value="الرابعة">الرابعة</SelectItem>
-                    <SelectItem value="الخامسة">الخامسة</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>المرحلة الدراسية</Label>
+              <Select value={studentForm.stage} onValueChange={(v) => setStudentForm({...studentForm, stage: v})}>
+                <SelectTrigger className={inputBg}><SelectValue placeholder="اختر المرحلة" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="أولى">أولى ثانوي</SelectItem>
+                  <SelectItem value="ثانية">ثانية ثانوي</SelectItem>
+                  <SelectItem value="ثالثة">ثالثة ثانوي</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Button
               className="w-full bg-gradient-to-r from-[#FF7A00] to-[#FF9D40] hover:from-[#FF8A10] hover:to-[#FFAD50] text-black font-bold"
               onClick={handleStudentRegister}
-              disabled={loading || !studentForm.name || !studentForm.phone}
+              disabled={loading || !studentForm.name || !studentForm.username || !studentForm.password || !studentForm.phone || !studentForm.stage}
             >
-              {loading ? 'جاري التسجيل...' : 'تسجيل الدخول'}
+              {loading ? 'جاري التسجيل...' : 'إنشاء حساب'}
             </Button>
+            <div className="text-center">
+              <button className={`text-sm ${textSecondary} hover:text-[#FF7A00]`} onClick={() => { setShowRegister(false); setShowStudentLogin(true); }}>
+                عندك حساب؟ سجّل دخول
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Student Login Dialog */}
+      <Dialog open={showStudentLogin} onOpenChange={setShowStudentLogin}>
+        <DialogContent className={`sm:max-w-sm ${darkMode ? 'bg-[#111] border-[rgba(255,122,0,0.2)] text-white' : ''}`}>
+          <DialogHeader>
+            <DialogTitle className="text-center">تسجيل دخول الطالب</DialogTitle>
+          </DialogHeader>
+          <DialogDescription className="sr-only">نموذج تسجيل دخول الطالب</DialogDescription>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label>اسم المستخدم</Label>
+              <Input value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} className={inputBg} dir="ltr" placeholder="أدخل اسم المستخدم" />
+            </div>
+            <div>
+              <Label>كلمة المرور</Label>
+              <Input value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} className={inputBg} dir="ltr" type="password" placeholder="أدخل كلمة المرور" />
+            </div>
+            <Button
+              className="w-full bg-gradient-to-r from-[#FF7A00] to-[#FF9D40] hover:from-[#FF8A10] hover:to-[#FFAD50] text-black font-bold"
+              onClick={handleStudentLogin}
+              disabled={loading || !loginForm.username || !loginForm.password}
+            >
+              {loading ? 'جاري الدخول...' : 'تسجيل الدخول'}
+            </Button>
+            <div className="text-center">
+              <button className={`text-sm ${textSecondary} hover:text-[#FF7A00]`} onClick={() => { setShowStudentLogin(false); setShowRegister(true); }}>
+                مش عندك حساب؟ سجّل الآن
+              </button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

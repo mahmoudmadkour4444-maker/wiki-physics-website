@@ -279,3 +279,53 @@ html { scroll-behavior: smooth; }
 .animate-breathe {
   animation: breathe 4s ease-in-out infinite;
 }
+
+/* Scientist glow breathing */
+@keyframes scientist-breathe {
+  0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.07); }
+}
+
+/* ===== ANTI-THEFT CSS PROTECTION ===== */
+
+/* Prevent text selection globally (except inputs) */
+body {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Allow selection only in input/textarea for usability */
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Prevent image dragging */
+img, video, audio {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  pointer-events: auto;
+  -webkit-touch-callout: none;
+}
+
+/* Prevent printing */
+@media print {
+  * { display: none !important; }
+  @page { size: 0; margin: 0; }
+}
+
+/* DevTools open detection visual hint */
+body[data-devtools="open"]::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999999;
+}

@@ -14,7 +14,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { title, description, image, price, order } = body;
+    const { title, description, image, price, stage, order } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'اسم الكورس مطلوب' }, { status: 400 });
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
       description: description || '',
       image: image || undefined,
       price: price || 'مجاني',
+      stage: stage || 'أولى',
       order: order || 0
     });
 

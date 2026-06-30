@@ -1,75 +1,125 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { findStudentByPhone, createStudent, updateStudent, createSession, getStudentActivations } from '@/lib/firebase-db';
+import { findStudentByPhone, findStudentByUsername, createStudent, updateStudent, createSession, getStudentActivations } from '@/lib/firebase-db';
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, phone, whatsapp, stage, year, fingerprint } = body;
+    const { action, name, username, password, phone, whatsapp, stage, fingerprint } = body;
 
-    if (!name || !phone) {
-      return NextResponse.json({ error: 'الاسم ورقم الهاتف مطلوبان' }, { status: 400 });
-    }
+    // ========== REGISTER ==========
+    if (action === 'register') {
+      if (!name || !username || !password || !phone || !stage) {
+        return NextResponse.json({ error: 'جميع البيانات مطلوبة' }, { status: 400 });
+      }
 
-    // Find or create student
-    let student = await findStudentByPhone(phone);
+      // Check if username already exists
+      const existingUser = await findStudentByUsername(username);
+      if (existingUser) {
+        return NextResponse.json({ error: 'اسم المستخدم موجود بالفعل' }, { status: 400 });
+      }
 
-    if (student) {
-      student = await updateStudent(student.id, {
+      // Create student
+      const student = await createStudent({
         name,
-        whatsapp: whatsapp || phone,
-        stage: stage || '',
-        year: year || '',
-        fingerprint: fingerprint || student.fingerprint
-      });
-    } else {
-      student = await createStudent({
-        name,
+        username,
+        password,
         phone,
         whatsapp: whatsapp || phone,
-        stage: stage || '',
-        year: year || '',
+        stage,
         fingerprint: fingerprint || undefined
+      });
+
+      // Create session
+      const token = `student_${student.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      await createSession({
+        studentId: student.id,
+        token,
+        fingerprint: fingerprint || 'unknown',
+        deviceInfo: body.deviceInfo || 'unknown',
+        expiresAt
+      });
+
+      const cookieStore = await cookies();
+      cookieStore.set('student_token', token, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30
+      });
+
+      const activations = await getStudentActivations(student.id);
+      const activeCourses = activations
+        .filter(a => new Date(a.expiresAt) > new Date())
+        .map(a => ({
+          courseId: a.accessKey?.courseId,
+          courseTitle: a.accessKey?.course?.title,
+          expiresAt: a.expiresAt
+        }));
+
+      return NextResponse.json({
+        success: true,
+        student: { id: student.id, name: student.name, username: student.username, stage: student.stage },
+        activeCourses
       });
     }
 
-    // Create session
-    const token = `student_${student.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    // ========== LOGIN ==========
+    if (action === 'login') {
+      if (!username || !password) {
+        return NextResponse.json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' }, { status: 400 });
+      }
 
-    await createSession({
-      studentId: student.id,
-      token,
-      fingerprint: fingerprint || 'unknown',
-      deviceInfo: body.deviceInfo || 'unknown',
-      expiresAt
-    });
+      const student = await findStudentByUsername(username);
+      if (!student) {
+        return NextResponse.json({ error: 'اسم المستخدم غير موجود' }, { status: 400 });
+      }
 
-    const cookieStore = await cookies();
-    cookieStore.set('student_token', token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30
-    });
+      if ((student as any).password !== password) {
+        return NextResponse.json({ error: 'كلمة المرور غير صحيحة' }, { status: 400 });
+      }
 
-    // Get student's active access
-    const activations = await getStudentActivations(student.id);
-    const activeCourses = activations
-      .filter(a => new Date(a.expiresAt) > new Date())
-      .map(a => ({
-        courseId: a.accessKey?.courseId,
-        courseTitle: a.accessKey?.course?.title,
-        expiresAt: a.expiresAt
-      }));
+      // Create session
+      const token = `student_${student.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    return NextResponse.json({
-      success: true,
-      student: { id: student.id, name: student.name, phone: student.phone },
-      activeCourses
-    });
+      await createSession({
+        studentId: student.id,
+        token,
+        fingerprint: fingerprint || 'unknown',
+        deviceInfo: body.deviceInfo || 'unknown',
+        expiresAt
+      });
+
+      const cookieStore = await cookies();
+      cookieStore.set('student_token', token, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30
+      });
+
+      const activations = await getStudentActivations(student.id);
+      const activeCourses = activations
+        .filter(a => new Date(a.expiresAt) > new Date())
+        .map(a => ({
+          courseId: a.accessKey?.courseId,
+          courseTitle: a.accessKey?.course?.title,
+          expiresAt: a.expiresAt
+        }));
+
+      return NextResponse.json({
+        success: true,
+        student: { id: student.id, name: student.name, username: (student as any).username, stage: (student as any).stage },
+        activeCourses
+      });
+    }
+
+    return NextResponse.json({ error: 'إجراء غير معروف' }, { status: 400 });
   } catch (error) {
-    console.error('Student login error:', error);
-    return NextResponse.json({ error: 'حدث خطأ في تسجيل الدخول' }, { status: 500 });
+    console.error('Student auth error:', error);
+    return NextResponse.json({ error: 'حدث خطأ' }, { status: 500 });
   }
 }

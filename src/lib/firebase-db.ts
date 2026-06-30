@@ -86,13 +86,14 @@ export async function getCourse(id: string) {
   return { id, ...snapshot.val(), lessons, _count: { lessons: lessons.length } };
 }
 
-export async function createCourse(data: { title: string; description: string; image?: string; price: string; order?: number }) {
+export async function createCourse(data: { title: string; description: string; image?: string; price: string; stage: string; order?: number }) {
   const id = generateId();
   await set(ref(database, `courses/${id}`), {
     title: data.title,
     description: data.description || '',
     image: data.image || null,
     price: data.price || 'مجاني',
+    stage: data.stage || 'أولى',
     order: data.order || 0,
     active: true,
     createdAt: new Date().toISOString(),
@@ -220,14 +221,28 @@ export async function findStudentByPhone(phone: string) {
   return null;
 }
 
-export async function createStudent(data: { name: string; phone: string; whatsapp: string; stage: string; year: string; fingerprint?: string }) {
+export async function findStudentByUsername(username: string) {
+  const snapshot = await get(ref(database, 'students'));
+  if (!snapshot.exists()) return null;
+  
+  const data = snapshot.val();
+  for (const [id, student] of Object.entries(data as Record<string, any>)) {
+    if (student.username === username) {
+      return { id, ...student };
+    }
+  }
+  return null;
+}
+
+export async function createStudent(data: { name: string; username: string; password: string; phone: string; whatsapp: string; stage: string; fingerprint?: string }) {
   const id = generateId();
   await set(ref(database, `students/${id}`), {
     name: data.name,
+    username: data.username,
+    password: data.password,
     phone: data.phone,
     whatsapp: data.whatsapp || data.phone,
-    stage: data.stage || '',
-    year: data.year || '',
+    stage: data.stage || 'أولى',
     fingerprint: data.fingerprint || null,
     createdAt: new Date().toISOString()
   });
@@ -419,6 +434,48 @@ export async function createRequest(data: { studentId: string; courseId: string;
 export async function updateRequest(id: string, data: any) {
   await update(ref(database, `accessRequests/${id}`), data);
   return { id, ...data };
+}
+
+// ========== STUDENT INBOX ==========
+export async function getStudentInbox(studentId: string) {
+  const snapshot = await get(ref(database, 'studentInbox'));
+  if (!snapshot.exists()) return [];
+  
+  const messages = [];
+  const data = snapshot.val();
+  for (const [id, msg] of Object.entries(data as Record<string, any>)) {
+    if (msg.studentId === studentId) {
+      const course = msg.courseId ? await getCourse(msg.courseId) : null;
+      messages.push({ id, ...msg, course: course ? { title: course.title } : null });
+    }
+  }
+  return messages.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function createInboxMessage(data: { studentId: string; title: string; body: string; type: string; courseId?: string; keyId?: string; code?: string }) {
+  const id = generateId();
+  await set(ref(database, `studentInbox/${id}`), {
+    studentId: data.studentId,
+    title: data.title,
+    body: data.body,
+    type: data.type,
+    courseId: data.courseId || null,
+    keyId: data.keyId || null,
+    code: data.code || null,
+    read: false,
+    createdAt: new Date().toISOString()
+  });
+  return { id, ...data };
+}
+
+export async function markInboxRead(id: string) {
+  await update(ref(database, `studentInbox/${id}`), { read: true });
+  return { success: true };
+}
+
+export async function getUnreadInboxCount(studentId: string) {
+  const messages = await getStudentInbox(studentId);
+  return messages.filter((m: any) => !m.read).length;
 }
 
 export async function deleteRequest(id: string) {
