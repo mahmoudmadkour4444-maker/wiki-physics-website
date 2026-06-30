@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  image       String?
+  price       String   @default("مجاني")
+  order       Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lessons     Lesson[]
+  keys        AccessKey[]
+  requests    AccessRequest[]
+}
+
+model Lesson {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  videoType   String   @default("youtube") // youtube, external, upload
+  videoUrl    String?
+  filePath    String?  // for uploaded videos
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  order       Int      @default(0)
+  duration    String?  // video duration
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Student {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String
+  whatsapp    String
+  stage       String   // educational stage
+  year        String   // academic year
+  fingerprint String?
+  createdAt   DateTime @default(now())
+  sessions    Session[]
+  requests    AccessRequest[]
+  activations KeyActivation[]
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  token       String   @unique
+  fingerprint String
+  deviceInfo  String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+}
+
+model AccessKey {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  courseId     String
+  course       Course   @relation(fields: [courseId], references: [id])
+  maxDevices   Int      @default(1)
+  durationDays Int      @default(30)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  activations  KeyActivation[]
+}
+
+model KeyActivation {
+  id          String    @id @default(cuid())
+  keyId       String
+  accessKey   AccessKey @relation(fields: [keyId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  fingerprint String
+  activatedAt DateTime  @default(now())
+  expiresAt   DateTime
+}
+
+model AccessRequest {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  code      String?
+  status    String   @default("pending") // pending, approved, rejected
+  whatsapp  String
+  message   String?
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
+model VideoUpload {
+  id        String   @id @default(cuid())
+  fileName  String
+  filePath  String
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+}
