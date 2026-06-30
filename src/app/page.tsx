@@ -246,6 +246,8 @@ export default function WikiPlatform() {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [adminForm, setAdminForm] = useState({ username: '', password: '' });
   const [courseForm, setCourseForm] = useState({ title: '', description: '', image: '', price: 'مجاني', stage: 'أولى' });
+  const [courseImageFile, setCourseImageFile] = useState<File | null>(null);
+  const [courseImageUploading, setCourseImageUploading] = useState(false);
   const [lessonForm, setLessonForm] = useState({ title: '', description: '', videoType: 'youtube', videoUrl: '', courseId: '', order: 0, duration: '' });
   const [keyForm, setKeyForm] = useState({ courseId: '', maxDevices: 1, durationDays: 30, code: '' });
   const [requestForm, setRequestForm] = useState({ courseId: '', code: '', whatsapp: '', message: '' });
@@ -483,15 +485,28 @@ export default function WikiPlatform() {
   const handleAddCourse = async () => {
     setLoading(true);
     try {
+      let imageUrl = courseForm.image;
+      // If user selected a file, upload it first
+      if (courseImageFile) {
+        const uploadedUrl = await handleImageUpload(courseImageFile);
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl;
+        } else {
+          setLoading(false);
+          return;
+        }
+      }
+
       const res = await fetch('/api/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(courseForm)
+        body: JSON.stringify({ ...courseForm, image: imageUrl })
       });
       const data = await res.json();
       if (data.id) {
         setShowAddCourse(false);
         setCourseForm({ title: '', description: '', image: '', price: 'مجاني', stage: 'أولى' });
+        setCourseImageFile(null);
         loadAdminData();
         toast({ title: 'تم إضافة الكورس بنجاح' });
       } else {
@@ -507,15 +522,25 @@ export default function WikiPlatform() {
     if (!editingCourse) return;
     setLoading(true);
     try {
+      let imageUrl = courseForm.image;
+      // If user selected a new file, upload it first
+      if (courseImageFile) {
+        const uploadedUrl = await handleImageUpload(courseImageFile);
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl;
+        }
+      }
+
       const res = await fetch(`/api/courses/${editingCourse.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(courseForm)
+        body: JSON.stringify({ ...courseForm, image: imageUrl })
       });
       const data = await res.json();
       if (data.id) {
         setShowEditCourse(false);
         setEditingCourse(null);
+        setCourseImageFile(null);
         loadAdminData();
         toast({ title: 'تم تعديل الكورس بنجاح' });
       } else {
@@ -719,13 +744,14 @@ export default function WikiPlatform() {
     setLoading(false);
   };
 
-  // ========== VIDEO UPLOAD ==========
+  // ========== VIDEO UPLOAD (to Supabase) ==========
   const handleVideoUpload = async (file: File) => {
     setUploading(true);
     setUploadProgress(0);
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('type', 'video');
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
@@ -740,24 +766,53 @@ export default function WikiPlatform() {
     xhr.onload = () => {
       if (xhr.status === 200) {
         const data = JSON.parse(xhr.responseText);
-        if (data.filePath) {
-          setLessonForm(prev => ({ ...prev, videoUrl: data.filePath, videoType: 'upload' }));
+        if (data.publicUrl) {
+          setLessonForm(prev => ({ ...prev, videoUrl: data.publicUrl, videoType: 'upload' }));
           toast({ title: 'تم رفع الفيديو بنجاح' });
         }
       } else {
-        toast({ title: 'خطأ', description: 'فشل رفع الفيديو', variant: 'destructive' });
+        try {
+          const errData = JSON.parse(xhr.responseText);
+          toast({ title: 'خطأ', description: errData.error || 'فشل رفع الفيديو', variant: 'destructive' });
+        } catch {
+          toast({ title: 'خطأ', description: 'فشل رفع الفيديو', variant: 'destructive' });
+        }
       }
       setUploading(false);
       setUploadProgress(0);
     };
 
     xhr.onerror = () => {
-      toast({ title: 'خطأ', description: 'فشل رفع الفيديو', variant: 'destructive' });
+      toast({ title: 'خطأ', description: 'فشل الاتصال بالخادم', variant: 'destructive' });
       setUploading(false);
       setUploadProgress(0);
     };
 
     xhr.send(formData);
+  };
+
+  // ========== IMAGE UPLOAD (to Supabase) ==========
+  const handleImageUpload = async (file: File): Promise<string | null> => {
+    setCourseImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'course');
+
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.publicUrl) {
+        return data.publicUrl;
+      } else {
+        toast({ title: 'خطأ', description: data.error || 'فشل رفع الصورة', variant: 'destructive' });
+        return null;
+      }
+    } catch {
+      toast({ title: 'خطأ', description: 'فشل رفع الصورة', variant: 'destructive' });
+      return null;
+    } finally {
+      setCourseImageUploading(false);
+    }
   };
 
   // ========== REQUEST STATUS ==========
@@ -962,8 +1017,38 @@ export default function WikiPlatform() {
                   <Textarea value={courseForm.description} onChange={(e) => setCourseForm({...courseForm, description: e.target.value})} className={inputBg} />
                 </div>
                 <div>
-                  <Label>رابط الصورة</Label>
-                  <Input value={courseForm.image} onChange={(e) => setCourseForm({...courseForm, image: e.target.value})} className={inputBg} dir="ltr" />
+                  <Label>صورة الكورس</Label>
+                  {courseImageUploading ? (
+                    <div className={`border-2 border-dashed ${borderColor} rounded-xl p-4 text-center`}>
+                      <RefreshCw className="w-6 h-6 mx-auto text-[#FF7A00] animate-spin" />
+                      <p className="text-sm mt-2">جاري رفع الصورة...</p>
+                    </div>
+                  ) : courseForm.image ? (
+                    <div className="relative group">
+                      <img src={courseForm.image} alt="صورة الكورس" className="w-full h-32 object-cover rounded-xl border border-white/10" />
+                      <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Button size="sm" variant="outline" onClick={() => { setCourseForm({...courseForm, image: ''}); setCourseImageFile(null); }}>
+                          <X className="w-4 h-4 ml-1" /> تغيير
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className={`block border-2 border-dashed ${borderColor} rounded-xl p-6 text-center cursor-pointer hover:border-[#FF7A00]/40 transition-colors`}>
+                      <Upload className="w-8 h-8 mx-auto text-[#FF7A00] mb-2" />
+                      <p className={`text-sm ${textSecondary}`}>اضغط لرفع صورة الكورس</p>
+                      <p className={`text-xs ${textMuted}`}>JPG, PNG, WebP</p>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setCourseImageFile(file);
+                          // Preview
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setCourseForm({...courseForm, image: ev.target?.result as string});
+                          reader.readAsDataURL(file);
+                        }
+                      }} />
+                    </label>
+                  )}
                 </div>
                 <div>
                   <Label>السعر</Label>
@@ -1033,7 +1118,38 @@ export default function WikiPlatform() {
         <div className="space-y-4 mt-4">
           <div><Label>اسم الكورس</Label><Input value={courseForm.title} onChange={(e) => setCourseForm({...courseForm, title: e.target.value})} className={inputBg} /></div>
           <div><Label>الوصف</Label><Textarea value={courseForm.description} onChange={(e) => setCourseForm({...courseForm, description: e.target.value})} className={inputBg} /></div>
-          <div><Label>رابط الصورة</Label><Input value={courseForm.image} onChange={(e) => setCourseForm({...courseForm, image: e.target.value})} className={inputBg} dir="ltr" /></div>
+          <div>
+            <Label>صورة الكورس</Label>
+            {courseImageUploading ? (
+              <div className={`border-2 border-dashed ${borderColor} rounded-xl p-3 text-center`}>
+                <RefreshCw className="w-5 h-5 mx-auto text-[#FF7A00] animate-spin" />
+                <p className="text-xs mt-1">جاري رفع الصورة...</p>
+              </div>
+            ) : courseForm.image ? (
+              <div className="relative group">
+                <img src={courseForm.image} alt="صورة الكورس" className="w-full h-24 object-cover rounded-xl border border-white/10" />
+                <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setCourseForm({...courseForm, image: ''}); setCourseImageFile(null); }}>
+                    <X className="w-3 h-3 ml-1" /> تغيير
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <label className={`block border-2 border-dashed ${borderColor} rounded-xl p-4 text-center cursor-pointer hover:border-[#FF7A00]/40 transition-colors`}>
+                <Upload className="w-6 h-6 mx-auto text-[#FF7A00] mb-1" />
+                <p className={`text-xs ${textSecondary}`}>رفع صورة</p>
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setCourseImageFile(file);
+                    const reader = new FileReader();
+                    reader.onload = (ev) => setCourseForm({...courseForm, image: ev.target?.result as string});
+                    reader.readAsDataURL(file);
+                  }
+                }} />
+              </label>
+            )}
+          </div>
           <div><Label>السعر</Label><Input value={courseForm.price} onChange={(e) => setCourseForm({...courseForm, price: e.target.value})} className={inputBg} /></div>
           <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black" onClick={handleEditCourse} disabled={loading}>
             {loading ? 'جاري التعديل...' : 'حفظ التعديلات'}
@@ -2577,13 +2693,16 @@ export default function WikiPlatform() {
                       allowFullScreen
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     />
-                  ) : selectedLesson.videoType === 'upload' && selectedLesson.filePath ? (
+                  ) : selectedLesson.videoType === 'upload' && (selectedLesson.videoUrl || selectedLesson.filePath) ? (
                     <video
-                      src={selectedLesson.filePath}
+                      src={selectedLesson.videoUrl || selectedLesson.filePath}
                       className="w-full h-full"
                       controls
                       controlsList="nodownload"
-                    />
+                      playsInline
+                    >
+                      متصفحك لا يدعم تشغيل الفيديو
+                    </video>
                   ) : selectedLesson.videoType === 'external' && selectedLesson.videoUrl ? (
                     <iframe
                       src={selectedLesson.videoUrl}
