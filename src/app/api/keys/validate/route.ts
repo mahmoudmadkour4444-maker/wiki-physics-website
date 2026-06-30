@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getKeyByCode, getKeyActivations } from '@/lib/firebase-db';
+import { getKeyByCode, getKeyActivations, getCourse } from '@/lib/firebase-db';
 
 export async function POST(req: Request) {
   try {
@@ -46,7 +46,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ valid: false, error: `تم استخدام الكود على الحد الأقصى من الأجهزة (${accessKey.maxDevices})` }, { status: 400 });
     }
 
-    const { getCourse } = await import('@/lib/firebase-db');
     const course = await getCourse(accessKey.courseId);
 
     return NextResponse.json({

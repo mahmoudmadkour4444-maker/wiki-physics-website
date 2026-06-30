@@ -60,8 +60,10 @@ export function middleware(request: NextRequest) {
 
   // Cross-Origin policies
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
-  response.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  // Use 'cross-origin' to allow Supabase storage resources (videos/images) to load
+  response.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  // Use 'credentialless' instead of 'require-corp' so Supabase public assets load without COEP headers
+  response.headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
 
   // Cache control for sensitive pages
   if (request.nextUrl.pathname.startsWith('/api/')) {

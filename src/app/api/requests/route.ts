@@ -51,7 +51,7 @@ export async function POST(req: Request) {
           `📱 *الهاتف:* ${student?.phone || '—'}\n` +
           `💬 *واتساب:* ${whatsapp}\n` +
           `📚 *المرحلة:* ${student?.stage || '—'}\n` +
-          `📅 *السنة:* ${student?.year || '—'}\n` +
+          `📅 *السنة:* ${(student as any)?.year || '—'}\n` +
           `📖 *الكورس:* ${course?.title || '—'}\n` +
           `🔑 *الكود:* ${code || 'لم يُدخل'}\n` +
           `📝 *ملاحظات:* ${message || 'لا يوجد'}\n` +

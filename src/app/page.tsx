@@ -61,9 +61,11 @@ interface Student {
   id: string;
   name: string;
   username: string;
+  password?: string;
   phone: string;
   whatsapp: string;
   stage: string;
+  year?: string;
   fingerprint?: string | null;
   createdAt: string;
   _count?: { sessions: number; requests: number; activations: number };
@@ -1092,7 +1094,7 @@ export default function WikiPlatform() {
                 <div className="flex items-center gap-1 shrink-0">
                   <Button size="icon" variant="ghost" className="text-[#FF7A00]" onClick={() => {
                     setEditingCourse(course);
-                    setCourseForm({ title: course.title, description: course.description, image: course.image || '', price: course.price });
+                    setCourseForm({ title: course.title, description: course.description, image: course.image || '', price: course.price, stage: course.stage || 'أولى' });
                     setShowEditCourse(true);
                   }}>
                     <Edit3 className="w-4 h-4" />

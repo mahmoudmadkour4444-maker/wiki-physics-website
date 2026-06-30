@@ -34,7 +34,7 @@ export async function GET() {
 
     return NextResponse.json({
       authenticated: true,
-      student: { id: student.id, name: student.name, phone: student.phone, whatsapp: student.whatsapp, stage: student.stage, year: student.year, createdAt: student.createdAt },
+      student: { id: student.id, name: student.name, username: (student as any).username, phone: student.phone, whatsapp: student.whatsapp, stage: student.stage, year: (student as any).year || '', createdAt: student.createdAt },
       activeCourses
     });
   } catch (error) {
