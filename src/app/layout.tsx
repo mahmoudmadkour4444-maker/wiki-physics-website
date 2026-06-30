@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title: "ويكي فيزياء | Wiki Physics",
   description: "منصة تعليمية متخصصة في الفيزياء للطالب العربي — مبنية على الفهم الحقيقي لا الحفظ",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
 };
 

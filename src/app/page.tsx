@@ -9,7 +9,8 @@ import {
   Clock, AlertCircle, Send, Phone, GraduationCap, Monitor,
   MessageSquare, BarChart3, Bell, Home, ClipboardList, User,
   RefreshCw, Copy, ExternalLink, Smartphone, Wifi, Inbox, Zap,
-  LayoutGrid, List
+  LayoutGrid, List, Atom, Sparkles, Target, Award, Rocket, Quote,
+  Headphones, ShieldCheck, TrendingUp, Star, ArrowLeft
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -1600,30 +1601,89 @@ export default function WikiPlatform() {
           {/* ===== HOME PAGE ===== */}
           {currentPage === 'home' && (
             <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              {/* Hero */}
-              <section className="relative overflow-hidden">
-                <div className="absolute inset-0 grid-pattern opacity-50" />
+
+              {/* ===== HERO SECTION ===== */}
+              <section className="relative overflow-hidden min-h-[100vh] flex items-center">
+                {/* Einstein Background Image */}
+                <div className="absolute inset-0">
+                  <img
+                    src="/einstein-bg.jpg"
+                    alt=""
+                    className="w-full h-full object-contain object-center"
+                  />
+                  {/* Dark overlay */}
+                  <div className="absolute inset-0 bg-black/60" />
+                  <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/40 via-[#050505]/60 to-[#050505]" />
+                </div>
+                {/* Background effects */}
+                <div className="absolute inset-0 grid-pattern opacity-30" />
                 <div className="absolute inset-0 radial-glow" />
-                <div className="relative max-w-7xl mx-auto px-4 py-20 md:py-32 text-center">
+                {/* Floating particles */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  {[...Array(6)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="floating-particle"
+                      style={{
+                        left: `${10 + i * 15}%`,
+                        top: `${20 + (i % 3) * 25}%`,
+                        animationDelay: `${i * 1.5}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+                {/* Glow orbs */}
+                <div className="absolute top-20 right-10 w-72 h-72 bg-[#FF7A00]/10 rounded-full blur-[100px] animate-pulse" />
+                <div className="absolute bottom-20 left-10 w-96 h-96 bg-[#FF7A00]/5 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1.5s' }} />
+
+                <div className="relative max-w-7xl mx-auto px-4 py-20 md:py-32 w-full text-center">
+                  {/* Text Content */}
                   <motion.div
-                    initial={{ y: 30, opacity: 0 }}
+                    initial={{ y: 40, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    transition={{ duration: 0.6 }}
+                    transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <Badge className="mb-4 bg-[#FF7A00]/10 text-[#FF7A00] border-[#FF7A00]/20 px-4 py-1">
-                      🚀 منصة تعليمية متطورة
-                    </Badge>
-                    <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-                      تعلّم الفيزياء بـ
-                      <span className="orange-gradient-text"> طريقة مختلفة</span>
-                    </h1>
-                    <p className={`text-lg md:text-xl ${textSecondary} max-w-2xl mx-auto mb-8`}>
-                      منصة تعليمية متخصصة في الفيزياء للطالب العربي — مبنية على الفهم الحقيقي لا الحفظ. كورسات شروحات فيديو تفاعلية مع متابعة مستمرة.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <motion.div
+                      initial={{ y: -10, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.2 }}
+                      className="inline-flex items-center gap-2 mb-6"
+                    >
+                      <Badge className="bg-[#FF7A00]/20 text-[#FF7A00] border-[#FF7A00]/30 px-4 py-1.5 text-sm backdrop-blur-sm">
+                        <Rocket className="w-4 h-4 ml-1" /> منصة تعليمية متطورة
+                      </Badge>
+                    </motion.div>
+
+                    <motion.h1
+                      className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight text-white"
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.3, duration: 0.6 }}
+                    >
+                      تعلّم الفيزياء
+                      <br />
+                      بـ<span className="orange-gradient-text"> طريقة مختلفة</span>
+                    </motion.h1>
+
+                    <motion.p
+                      className="text-lg md:text-xl text-white/70 max-w-2xl mx-auto mb-8 leading-relaxed"
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.5, duration: 0.6 }}
+                    >
+                      منصة ويكي فيزياء التعليمية المتخصصة في الفيزياء للطالب العربي — مبنية على الفهم الحقيقي لا الحفظ.
+                      كورسات مع شروحات فيديو تفاعلية ومتابعة مستمرة من أفضل المدرسين.
+                    </motion.p>
+
+                    <motion.div
+                      className="flex flex-col sm:flex-row gap-4 justify-center"
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.7, duration: 0.6 }}
+                    >
                       <Button
                         size="lg"
-                        className="bg-gradient-to-r from-[#FF7A00] to-[#FF9D40] hover:from-[#FF8A10] hover:to-[#FFAD50] text-black font-bold px-8 glow-orange"
+                        className="bg-gradient-to-r from-[#FF7A00] to-[#FF9D40] hover:from-[#FF8A10] hover:to-[#FFAD50] text-black font-bold px-8 glow-orange text-lg h-14"
                         onClick={() => setCurrentPage('courses')}
                       >
                         <BookOpen className="w-5 h-5 ml-2" /> تصفح الكورسات
@@ -1632,127 +1692,492 @@ export default function WikiPlatform() {
                         <Button
                           size="lg"
                           variant="outline"
-                          className={`border-[#FF7A00]/30 text-[#FF7A00] hover:bg-[#FF7A00]/10 px-8`}
+                          className="border-white/20 text-white hover:bg-white/10 px-8 h-14 text-lg backdrop-blur-sm"
                           onClick={() => setShowRegister(true)}
                         >
-                          <User className="w-5 h-5 ml-2" /> سجّل الآن
+                          <User className="w-5 h-5 ml-2" /> سجّل الآن مجاناً
                         </Button>
                       )}
-                    </div>
-                  </motion.div>
+                    </motion.div>
 
-                  {/* Stats */}
+                    {/* Floating physics formulas */}
+                    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                      <motion.div
+                        className="absolute top-[15%] right-[8%] bg-[#FF7A00]/90 text-black px-4 py-2 rounded-xl text-sm font-bold shadow-lg backdrop-blur-sm"
+                        animate={{ y: [0, -12, 0] }}
+                        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                      >
+                        E = mc²
+                      </motion.div>
+                      <motion.div
+                        className="absolute bottom-[25%] left-[6%] bg-black/60 border border-[#FF7A00]/40 text-[#FF7A00] px-4 py-2 rounded-xl text-sm font-bold shadow-lg backdrop-blur-sm"
+                        animate={{ y: [0, 10, 0] }}
+                        transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+                      >
+                        F = ma
+                      </motion.div>
+                      <motion.div
+                        className="absolute top-[40%] left-[10%] bg-black/50 border border-white/10 text-white/70 px-3 py-1.5 rounded-lg text-xs font-mono backdrop-blur-sm"
+                        animate={{ y: [0, -8, 0] }}
+                        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+                      >
+                        ΔxΔp ≥ ℏ/2
+                      </motion.div>
+                      <motion.div
+                        className="absolute bottom-[15%] right-[12%] bg-black/50 border border-white/10 text-white/70 px-3 py-1.5 rounded-lg text-xs font-mono backdrop-blur-sm"
+                        animate={{ y: [0, 8, 0] }}
+                        transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+                      >
+                        PV = nRT
+                      </motion.div>
+                    </div>
+
+                    {/* Mini stats under CTA */}
+                    <motion.div
+                      className="flex items-center gap-6 mt-12 justify-center"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 1 }}
+                    >
+                      <div className="flex -space-x-2 space-x-reverse">
+                        {[1,2,3,4].map(n => (
+                          <div key={n} className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FF7A00] to-[#FF9D40] border-2 border-black flex items-center justify-center text-black text-xs font-bold">
+                            {n}
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-white">+500 طالب</div>
+                        <div className="text-xs text-white/50">انضموا هذا الشهر</div>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                </div>
+              </section>
+
+              {/* ===== STATS BAR ===== */}
+              <section className={`py-8 border-y ${darkMode ? 'border-[#FF7A00]/10 bg-[#080808]' : 'border-orange-200 bg-orange-50/50'}`}>
+                <div className="max-w-7xl mx-auto px-4">
                   <motion.div
-                    initial={{ y: 40, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                    className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-16 max-w-3xl mx-auto"
+                    initial={{ y: 30, opacity: 0 }}
+                    whileInView={{ y: 0, opacity: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.6 }}
+                    className="grid grid-cols-2 md:grid-cols-4 gap-6"
                   >
                     {[
-                      { icon: <BookOpen className="w-6 h-6" />, value: courses.length, label: 'كورس متاح' },
-                      { icon: <Video className="w-6 h-6" />, value: courses.reduce((sum, c) => sum + (c._count?.lessons || 0), 0), label: 'درس فيديو' },
-                      { icon: <Users className="w-6 h-6" />, value: '500+', label: 'طالب نشط' },
-                      { icon: <Monitor className="w-6 h-6" />, value: '24/7', label: 'متاح دائماً' },
+                      { icon: <BookOpen className="w-7 h-7" />, value: courses.length, label: 'كورس متاح', color: 'text-[#FF7A00]' },
+                      { icon: <Video className="w-7 h-7" />, value: courses.reduce((sum, c) => sum + (c._count?.lessons || 0), 0), label: 'درس فيديو', color: 'text-blue-400' },
+                      { icon: <Users className="w-7 h-7" />, value: '500+', label: 'طالب نشط', color: 'text-green-400' },
+                      { icon: <Monitor className="w-7 h-7" />, value: '24/7', label: 'متاح دائماً', color: 'text-purple-400' },
                     ].map((stat, i) => (
-                      <Card key={i} className={`p-4 ${bgCard} text-center`}>
-                        <div className="text-[#FF7A00] mb-2 flex justify-center">{stat.icon}</div>
-                        <div className="text-2xl font-bold">{stat.value}</div>
+                      <motion.div
+                        key={i}
+                        initial={{ y: 20, opacity: 0 }}
+                        whileInView={{ y: 0, opacity: 1 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: i * 0.1 }}
+                        className="text-center"
+                      >
+                        <div className={`${stat.color} mb-2 flex justify-center`}>{stat.icon}</div>
+                        <div className="text-3xl font-bold mb-1">{stat.value}</div>
                         <div className={`text-sm ${textSecondary}`}>{stat.label}</div>
-                      </Card>
+                      </motion.div>
                     ))}
                   </motion.div>
                 </div>
               </section>
 
-              {/* Featured Courses */}
-              <section className="max-w-7xl mx-auto px-4 py-16">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h2 className="text-2xl md:text-3xl font-bold">الكورسات المميزة</h2>
-                    <p className={`${textSecondary} mt-1`}>اختر الكورس المناسب لك وابدأ رحلة التعلم</p>
-                  </div>
-                  <Button variant="outline" className={`border-[#FF7A00]/30 text-[#FF7A00]`} onClick={() => setCurrentPage('courses')}>
-                    عرض الكل <ChevronLeft className="w-4 h-4 mr-1" />
-                  </Button>
-                </div>
+              {/* ===== FEATURES SECTION ===== */}
+              <section className="max-w-7xl mx-auto px-4 py-20">
+                <motion.div
+                  className="text-center mb-14"
+                  initial={{ y: 30, opacity: 0 }}
+                  whileInView={{ y: 0, opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6 }}
+                >
+                  <Badge className="mb-4 bg-[#FF7A00]/10 text-[#FF7A00] border-[#FF7A00]/20 px-4 py-1">
+                    <Sparkles className="w-4 h-4 ml-1" /> لماذا ويكي فيزياء؟
+                  </Badge>
+                  <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                    منصة مصممة خصيصاً <span className="orange-gradient-text">للطالب العربي</span>
+                  </h2>
+                  <p className={`${textSecondary} max-w-2xl mx-auto text-lg`}>
+                    نوفر لك تجربة تعليمية متكاملة تجمع بين التكنولوجيا الحديثة وأفضل طرق التدريس
+                  </p>
+                </motion.div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {courses.slice(0, 6).map((course, i) => (
+                  {[
+                    {
+                      icon: <Atom className="w-7 h-7" />,
+                      title: 'محتوى فيزيائي متخصص',
+                      desc: 'شروحات مركزة على الفيزياء بجميع فروعها — ميكانيكا، كهربية، حديثة، وغيرها — مصممة حسب المناهج العربية.',
+                      gradient: 'from-orange-500/10 to-red-500/10',
+                    },
+                    {
+                      icon: <Video className="w-7 h-7" />,
+                      title: 'فيديوهات تفاعلية عالية الجودة',
+                      desc: 'دروس مسجلة بأعلى جودة مع رسوم توضيحية متحركة وأمثلة عملية تساعدك على الفهم العميق وليس الحفظ.',
+                      gradient: 'from-blue-500/10 to-cyan-500/10',
+                    },
+                    {
+                      icon: <ShieldCheck className="w-7 h-7" />,
+                      title: 'حماية وأمان المحتوى',
+                      desc: 'نظام حماية متطور يضمن وصول المحتوى فقط للمشتركين المصرح لهم مع منع مشاركة الحسابات.',
+                      gradient: 'from-green-500/10 to-emerald-500/10',
+                    },
+                    {
+                      icon: <Headphones className="w-7 h-7" />,
+                      title: 'متابعة ودعم مستمر',
+                      desc: 'تواصل مباشر مع المدرسين عبر الواتساب لأي استفسار أو مساعدة في حل المسائل والواجبات.',
+                      gradient: 'from-purple-500/10 to-pink-500/10',
+                    },
+                    {
+                      icon: <Smartphone className="w-7 h-7" />,
+                      title: 'تعلم من أي مكان',
+                      desc: 'منصة متوافقة مع جميع الأجهزة — شاهد الدروس من الموبايل أو التابلت أو الكمبيوتر في أي وقت.',
+                      gradient: 'from-yellow-500/10 to-orange-500/10',
+                    },
+                    {
+                      icon: <TrendingUp className="w-7 h-7" />,
+                      title: 'تتبع تقدمك',
+                      desc: 'تابع مستواك وتقدمك في كل كورس مع إحصائيات تفصيلية وتقارير دورية تساعدك تحسن أداءك.',
+                      gradient: 'from-teal-500/10 to-blue-500/10',
+                    },
+                  ].map((feature, i) => (
                     <motion.div
-                      key={course.id}
-                      initial={{ y: 20, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: i * 0.1 }}
+                      key={i}
+                      initial={{ y: 30, opacity: 0 }}
+                      whileInView={{ y: 0, opacity: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.1, duration: 0.5 }}
                     >
-                      <Card className={`overflow-hidden ${bgCard} video-card-hover cursor-pointer group`}
-                        onClick={() => navigateToCourse(course.id)}
-                      >
-                        <div className="relative h-48 bg-gradient-to-br from-[#FF7A00]/20 to-[#FF7A00]/5 flex items-center justify-center overflow-hidden">
-                          {course.image ? (
-                            <img src={course.image} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                          ) : (
-                            <BookOpen className="w-16 h-16 text-[#FF7A00]/30" />
-                          )}
-                          <div className="absolute top-3 left-3">
-                            <Badge className="bg-[#FF7A00] text-black font-bold">{course.price}</Badge>
-                          </div>
-                          {hasAccessToCourse(course.id) && (
-                            <div className="absolute top-3 right-3">
-                              <Badge className="bg-green-500 text-white"><Unlock className="w-3 h-3 ml-1" /> مفعّل</Badge>
-                            </div>
-                          )}
+                      <Card className={`p-6 ${bgCard} video-card-hover h-full group`}>
+                        <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.gradient} text-[#FF7A00] flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300`}>
+                          {feature.icon}
                         </div>
-                        <div className="p-5">
-                          <h3 className="font-bold text-lg mb-2 group-hover:text-[#FF7A00] transition-colors">{course.title}</h3>
-                          <p className={`text-sm ${textSecondary} line-clamp-2 mb-4`}>{course.description}</p>
-                          <div className="flex items-center justify-between">
-                            <div className={`flex items-center gap-1 text-sm ${textSecondary}`}>
-                              <Video className="w-4 h-4" /> {course._count?.lessons || 0} درس
+                        <h3 className="font-bold text-lg mb-3 group-hover:text-[#FF7A00] transition-colors">{feature.title}</h3>
+                        <p className={`${textSecondary} text-sm leading-relaxed`}>{feature.desc}</p>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              </section>
+
+              {/* ===== FEATURED COURSES ===== */}
+              <section className={`py-20 ${darkMode ? 'bg-[#0a0a0a]' : 'bg-gray-100/50'}`}>
+                <div className="max-w-7xl mx-auto px-4">
+                  <motion.div
+                    className="flex items-center justify-between mb-10"
+                    initial={{ y: 20, opacity: 0 }}
+                    whileInView={{ y: 0, opacity: 1 }}
+                    viewport={{ once: true }}
+                  >
+                    <div>
+                      <Badge className="mb-3 bg-[#FF7A00]/10 text-[#FF7A00] border-[#FF7A00]/20 px-3 py-1">
+                        <GraduationCap className="w-3.5 h-3.5 ml-1" /> الكورسات
+                      </Badge>
+                      <h2 className="text-2xl md:text-3xl font-bold">الكورسات المميزة</h2>
+                      <p className={`${textSecondary} mt-1`}>اختر الكورس المناسب لك وابدأ رحلة التعلم</p>
+                    </div>
+                    <Button variant="outline" className={`border-[#FF7A00]/30 text-[#FF7A00] hidden sm:flex`} onClick={() => setCurrentPage('courses')}>
+                      عرض الكل <ChevronLeft className="w-4 h-4 mr-1" />
+                    </Button>
+                  </motion.div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {courses.slice(0, 6).map((course, i) => (
+                      <motion.div
+                        key={course.id}
+                        initial={{ y: 30, opacity: 0 }}
+                        whileInView={{ y: 0, opacity: 1 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: i * 0.1 }}
+                      >
+                        <Card className={`overflow-hidden ${bgCard} video-card-hover cursor-pointer group`}
+                          onClick={() => navigateToCourse(course.id)}
+                        >
+                          <div className="relative h-48 bg-gradient-to-br from-[#FF7A00]/20 to-[#FF7A00]/5 flex items-center justify-center overflow-hidden">
+                            {course.image ? (
+                              <img src={course.image} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                            ) : (
+                              <BookOpen className="w-16 h-16 text-[#FF7A00]/30" />
+                            )}
+                            <div className="absolute top-3 left-3">
+                              <Badge className="bg-[#FF7A00] text-black font-bold">{course.price}</Badge>
                             </div>
-                            <Button size="sm" variant="ghost" className="text-[#FF7A00]">
-                              تفاصيل <ChevronLeft className="w-4 h-4 mr-1" />
-                            </Button>
+                            {hasAccessToCourse(course.id) && (
+                              <div className="absolute top-3 right-3">
+                                <Badge className="bg-green-500 text-white"><Unlock className="w-3 h-3 ml-1" /> مفعّل</Badge>
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-5">
+                            <h3 className="font-bold text-lg mb-2 group-hover:text-[#FF7A00] transition-colors">{course.title}</h3>
+                            <p className={`text-sm ${textSecondary} line-clamp-2 mb-4`}>{course.description}</p>
+                            <div className="flex items-center justify-between">
+                              <div className={`flex items-center gap-1 text-sm ${textSecondary}`}>
+                                <Video className="w-4 h-4" /> {course._count?.lessons || 0} درس
+                              </div>
+                              <Button size="sm" variant="ghost" className="text-[#FF7A00]">
+                                تفاصيل <ChevronLeft className="w-4 h-4 mr-1" />
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  {courses.length === 0 && (
+                    <motion.div
+                      className="text-center py-16"
+                      initial={{ opacity: 0 }}
+                      whileInView={{ opacity: 1 }}
+                      viewport={{ once: true }}
+                    >
+                      <BookOpen className={`w-16 h-16 mx-auto mb-4 ${textMuted}`} />
+                      <p className={`text-lg ${textSecondary}`}>لا توجد كورسات حالياً</p>
+                      <p className={`text-sm ${textMuted}`}>سيتم إضافة كورسات جديدة قريباً</p>
+                    </motion.div>
+                  )}
+
+                  {/* Mobile show all button */}
+                  <div className="mt-8 text-center sm:hidden">
+                    <Button variant="outline" className={`border-[#FF7A00]/30 text-[#FF7A00]`} onClick={() => setCurrentPage('courses')}>
+                      عرض كل الكورسات <ChevronLeft className="w-4 h-4 mr-1" />
+                    </Button>
+                  </div>
+                </div>
+              </section>
+
+              {/* ===== HOW IT WORKS ===== */}
+              <section className="max-w-7xl mx-auto px-4 py-20">
+                <motion.div
+                  className="text-center mb-14"
+                  initial={{ y: 30, opacity: 0 }}
+                  whileInView={{ y: 0, opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6 }}
+                >
+                  <Badge className="mb-4 bg-[#FF7A00]/10 text-[#FF7A00] border-[#FF7A00]/20 px-4 py-1">
+                    <Target className="w-4 h-4 ml-1" /> خطوات بسيطة
+                  </Badge>
+                  <h2 className="text-3xl md:text-4xl font-bold mb-4">كيف تبدأ رحلتك؟</h2>
+                  <p className={`${textSecondary} max-w-2xl mx-auto text-lg`}>
+                    في 4 خطوات بس هيبقى معاك وصول لكل الكورسات والدروس
+                  </p>
+                </motion.div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 relative">
+                  {/* Connecting line (desktop only) */}
+                  <div className="hidden md:block absolute top-[52px] right-[12.5%] left-[12.5%] h-[2px] bg-gradient-to-l from-[#FF7A00]/40 via-[#FF7A00]/20 to-[#FF7A00]/40" />
+
+                  {[
+                    { step: '١', icon: <User className="w-8 h-8" />, title: 'سجّل حسابك', desc: 'أدخل بياناتك ورقم هاتفك والمرحلة التعليمية في ثواني' },
+                    { step: '٢', icon: <BookOpen className="w-8 h-8" />, title: 'اختر الكورس', desc: 'تصفح الكورسات المتاحة واختر الكورس اللي يناسبك' },
+                    { step: '٣', icon: <Key className="w-8 h-8" />, title: 'فعّل الكود', desc: 'أدخل كود الاشتراك أو أرسل طلب للأدمن مباشرة' },
+                    { step: '٤', icon: <Play className="w-8 h-8" />, title: 'ابدأ التعلم', desc: 'شاهد الدروس وتعلم في أي وقت ومن أي مكان' },
+                  ].map((item, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ y: 30, opacity: 0 }}
+                      whileInView={{ y: 0, opacity: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.15 }}
+                    >
+                      <Card className={`p-6 text-center ${bgCard} h-full relative`}>
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF7A00] to-[#FF9D40] text-black flex items-center justify-center mx-auto mb-5 shadow-lg shadow-[#FF7A00]/20">
+                          {item.icon}
+                        </div>
+                        <div className="text-sm text-[#FF7A00] font-bold mb-2">الخطوة {item.step}</div>
+                        <h3 className="font-bold text-lg mb-2">{item.title}</h3>
+                        <p className={`text-sm ${textSecondary}`}>{item.desc}</p>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              </section>
+
+              {/* ===== TESTIMONIALS ===== */}
+              <section className="max-w-7xl mx-auto px-4 py-20">
+                <motion.div
+                  className="text-center mb-14"
+                  initial={{ y: 30, opacity: 0 }}
+                  whileInView={{ y: 0, opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6 }}
+                >
+                  <Badge className="mb-4 bg-[#FF7A00]/10 text-[#FF7A00] border-[#FF7A00]/20 px-4 py-1">
+                    <Star className="w-4 h-4 ml-1" /> آراء الطلاب
+                  </Badge>
+                  <h2 className="text-3xl md:text-4xl font-bold mb-4">إيه الطلاب بتقول؟</h2>
+                  <p className={`${textSecondary} max-w-2xl mx-auto text-lg`}>
+                    تعليقات حقيقية من طلاب غيروا طريقتهم في تعلم الفيزياء
+                  </p>
+                </motion.div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {[
+                    {
+                      name: 'أحمد محمد',
+                      stage: 'الصف الثالث الثانوي',
+                      text: 'منصة ويكي فيزياء غيّرت طريقة فهمي للفيزياء تماماً. الشروحات بسيطة وواضحة وفي النهاية بفهم مش بحفظ. أفضل استثمار عملته في مستقبلي.',
+                      rating: 5,
+                    },
+                    {
+                      name: 'سارة علي',
+                      stage: 'الصف الثاني الثانوي',
+                      text: 'كنت بخاف من الفيزياء، بس بعد الكورسات دي بقيت أحبها. المدرس بيشرح بطريقة سهلة وبيوصل المعلومة بسرعة. شكراً ويكي فيزياء!',
+                      rating: 5,
+                    },
+                    {
+                      name: 'محمود حسن',
+                      stage: 'طالب جامعي — كلية الهندسة',
+                      text: 'المحتوى ممتاز ومتنظم بشكل احترافي. قدرت أراجع كل اللي فاتني وأفهم أساسيات كنت ناسيها. الدعم كمان سريع جداً ومفيد.',
+                      rating: 5,
+                    },
+                  ].map((testimonial, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ y: 30, opacity: 0 }}
+                      whileInView={{ y: 0, opacity: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.15 }}
+                    >
+                      <Card className={`p-6 ${bgCard} video-card-hover h-full`}>
+                        <div className="flex items-center gap-1 mb-4">
+                          {[...Array(testimonial.rating)].map((_, s) => (
+                            <Star key={s} className="w-4 h-4 fill-[#FF7A00] text-[#FF7A00]" />
+                          ))}
+                        </div>
+                        <p className={`${textSecondary} mb-5 leading-relaxed text-sm`}>&quot;{testimonial.text}&quot;</p>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FF7A00] to-[#FF9D40] flex items-center justify-center text-black font-bold text-sm">
+                            {testimonial.name[0]}
+                          </div>
+                          <div>
+                            <div className="font-bold text-sm">{testimonial.name}</div>
+                            <div className={`text-xs ${textMuted}`}>{testimonial.stage}</div>
                           </div>
                         </div>
                       </Card>
                     </motion.div>
                   ))}
                 </div>
-
-                {courses.length === 0 && (
-                  <div className="text-center py-16">
-                    <BookOpen className={`w-16 h-16 mx-auto mb-4 ${textMuted}`} />
-                    <p className={`text-lg ${textSecondary}`}>لا توجد كورسات حالياً</p>
-                    <p className={`text-sm ${textMuted}`}>سيتم إضافة كورسات جديدة قريباً</p>
-                  </div>
-                )}
               </section>
 
-              {/* How it works */}
-              <section className={`py-16 ${darkMode ? 'bg-[#0a0a0a]' : 'bg-gray-100/50'}`}>
-                <div className="max-w-7xl mx-auto px-4">
-                  <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">كيف تبدأ؟</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    {[
-                      { step: '1', icon: <User className="w-8 h-8" />, title: 'سجّل حسابك', desc: 'أدخل بياناتك ورقم هاتفك والمرحلة التعليمية' },
-                      { step: '2', icon: <BookOpen className="w-8 h-8" />, title: 'اختر الكورس', desc: 'تصفح الكورسات المتاحة واختر ما يناسبك' },
-                      { step: '3', icon: <Key className="w-8 h-8" />, title: 'فعّل الكود', desc: 'أدخل كود الاشتراك أو أرسل طلب للأدمن' },
-                      { step: '4', icon: <Play className="w-8 h-8" />, title: 'ابدأ التعلم', desc: 'شاهد الدروس وتعلم في أي وقت ومن أي مكان' },
-                    ].map((item, i) => (
-                      <motion.div key={i} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.15 }}>
-                        <Card className={`p-6 text-center ${bgCard} h-full`}>
-                          <div className="w-14 h-14 rounded-2xl bg-[#FF7A00]/10 text-[#FF7A00] flex items-center justify-center mx-auto mb-4">
-                            {item.icon}
-                          </div>
-                          <div className="text-sm text-[#FF7A00] font-bold mb-2">الخطوة {item.step}</div>
-                          <h3 className="font-bold mb-2">{item.title}</h3>
-                          <p className={`text-sm ${textSecondary}`}>{item.desc}</p>
-                        </Card>
-                      </motion.div>
-                    ))}
-                  </div>
+              {/* ===== CTA SECTION ===== */}
+              <section className="py-20 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-[#FF7A00]/10 via-transparent to-[#FF7A00]/5" />
+                <div className="absolute inset-0 grid-pattern opacity-30" />
+                {/* Glow */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#FF7A00]/8 rounded-full blur-[120px]" />
+
+                <div className="max-w-4xl mx-auto px-4 text-center relative">
+                  <motion.div
+                    initial={{ y: 30, opacity: 0 }}
+                    whileInView={{ y: 0, opacity: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.6 }}
+                  >
+                    <motion.div
+                      className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#FF7A00] to-[#FF9D40] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-[#FF7A00]/20"
+                      animate={{ y: [0, -8, 0] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      <GraduationCap className="w-10 h-10 text-black" />
+                    </motion.div>
+                    <h2 className="text-3xl md:text-5xl font-bold mb-6">
+                      جاهز تبدأ <span className="orange-gradient-text">رحلة التعلم؟</span>
+                    </h2>
+                    <p className={`${textSecondary} text-lg max-w-2xl mx-auto mb-10 leading-relaxed`}>
+                      انضم لأكثر من 500 طالب اختاروا يتعلموا الفيزياء بطريقة مختلفة.
+                      سجّل الآن واحصل على وصول فوري للكورسات المتاحة.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                      {!student ? (
+                        <>
+                          <Button
+                            size="lg"
+                            className="bg-gradient-to-r from-[#FF7A00] to-[#FF9D40] hover:from-[#FF8A10] hover:to-[#FFAD50] text-black font-bold px-10 glow-orange text-lg h-14"
+                            onClick={() => setShowRegister(true)}
+                          >
+                            <User className="w-5 h-5 ml-2" /> سجّل الآن مجاناً
+                          </Button>
+                          <Button
+                            size="lg"
+                            variant="outline"
+                            className={`border-[#FF7A00]/30 text-[#FF7A00] hover:bg-[#FF7A00]/10 px-10 h-14 text-lg`}
+                            onClick={() => setCurrentPage('courses')}
+                          >
+                            <BookOpen className="w-5 h-5 ml-2" /> تصفح الكورسات
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="lg"
+                          className="bg-gradient-to-r from-[#FF7A00] to-[#FF9D40] hover:from-[#FF8A10] hover:to-[#FFAD50] text-black font-bold px-10 glow-orange text-lg h-14"
+                          onClick={() => setCurrentPage('courses')}
+                        >
+                          <BookOpen className="w-5 h-5 ml-2" /> تصفح الكورسات
+                        </Button>
+                      )}
+                    </div>
+                  </motion.div>
                 </div>
               </section>
+
+              {/* ===== FOOTER ===== */}
+              <footer className={`py-12 border-t ${darkMode ? 'bg-[#050505] border-[#FF7A00]/10' : 'bg-white border-gray-200'}`}>
+                <div className="max-w-7xl mx-auto px-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                    {/* Brand */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF7A00] to-[#FF9D40] flex items-center justify-center text-black font-bold">
+                          و
+                        </div>
+                        <span className="text-xl font-bold">ويكي فيزياء</span>
+                      </div>
+                      <p className={`${textSecondary} text-sm leading-relaxed`}>
+                        منصة تعليمية متخصصة في الفيزياء للطالب العربي. نساعدك تفهم الفيزياء بطريقة مختلفة ومتطورة.
+                      </p>
+                    </div>
+                    {/* Links */}
+                    <div>
+                      <h4 className="font-bold mb-4">روابط سريعة</h4>
+                      <div className="space-y-2">
+                        <button onClick={() => setCurrentPage('home')} className={`block text-sm ${textSecondary} hover:text-[#FF7A00] transition-colors`}>الرئيسية</button>
+                        <button onClick={() => setCurrentPage('courses')} className={`block text-sm ${textSecondary} hover:text-[#FF7A00] transition-colors`}>الكورسات</button>
+                        <button onClick={() => !student ? setShowRegister(true) : null} className={`block text-sm ${textSecondary} hover:text-[#FF7A00] transition-colors`}>التسجيل</button>
+                      </div>
+                    </div>
+                    {/* Contact */}
+                    <div>
+                      <h4 className="font-bold mb-4">تواصل معنا</h4>
+                      <div className="space-y-2">
+                        <div className={`flex items-center gap-2 text-sm ${textSecondary}`}>
+                          <Phone className="w-4 h-4 text-[#FF7A00]" /> واتساب للدعم والمساعدة
+                        </div>
+                        <div className={`flex items-center gap-2 text-sm ${textSecondary}`}>
+                          <MessageSquare className="w-4 h-4 text-[#FF7A00]" /> رد سريع على الاستفسارات
+                        </div>
+                        <div className={`flex items-center gap-2 text-sm ${textSecondary}`}>
+                          <Wifi className="w-4 h-4 text-[#FF7A00]" /> متاح 24/7
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`pt-6 border-t ${darkMode ? 'border-white/5' : 'border-gray-200'} text-center`}>
+                    <p className={`text-sm ${textMuted}`}>
+                      © {new Date().getFullYear()} ويكي فيزياء — جميع الحقوق محفوظة
+                    </p>
+                  </div>
+                </div>
+              </footer>
             </motion.div>
           )}
 
