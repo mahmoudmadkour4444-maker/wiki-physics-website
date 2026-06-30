@@ -1,5 +1,5 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { getKeyByCode, getKeyActivations } from '@/lib/firebase-db';
 
 export async function POST(req: Request) {
   try {
@@ -10,13 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'الكود وبيانات الطالب مطلوبة' }, { status: 400 });
     }
 
-    const accessKey = await db.accessKey.findUnique({
-      where: { code },
-      include: {
-        course: true,
-        activations: true
-      }
-    });
+    const accessKey = await getKeyByCode(code);
 
     if (!accessKey) {
       return NextResponse.json({ valid: false, error: 'الكود غير صحيح' }, { status: 404 });
@@ -30,34 +24,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ valid: false, error: 'هذا الكود لا يعمل لهذا الكورس' }, { status: 400 });
     }
 
-    // Check if student already has access
-    const existingActivation = await db.keyActivation.findFirst({
-      where: { keyId: accessKey.id, studentId, expiresAt: { gt: new Date() } }
-    });
+    // Check activations
+    const activations = await getKeyActivations(accessKey.id);
+    const activeActivations = activations.filter(a => new Date(a.expiresAt) > new Date());
 
+    // Check if student already activated
+    const existingActivation = activeActivations.find(a => a.studentId === studentId);
     if (existingActivation) {
-      return NextResponse.json({ 
-        valid: true, 
+      const courseSnap = await getCourse(accessKey.courseId);
+      return NextResponse.json({
+        valid: true,
         alreadyActive: true,
         expiresAt: existingActivation.expiresAt,
-        course: accessKey.course
+        course: courseSnap ? { title: courseSnap.title } : null
       });
     }
 
-    // Check device count
-    const activeActivations = await db.keyActivation.findMany({
-      where: { keyId: accessKey.id, expiresAt: { gt: new Date() } }
-    });
-
-    // Get unique fingerprints
+    // Check unique devices
     const uniqueDevices = new Set(activeActivations.map(a => a.fingerprint));
-
     if (uniqueDevices.size >= accessKey.maxDevices) {
       return NextResponse.json({ valid: false, error: `تم استخدام الكود على الحد الأقصى من الأجهزة (${accessKey.maxDevices})` }, { status: 400 });
     }
 
-    return NextResponse.json({ 
-      valid: true, 
+    const { getCourse } = await import('@/lib/firebase-db');
+    const course = await getCourse(accessKey.courseId);
+
+    return NextResponse.json({
+      valid: true,
       canActivate: true,
       key: {
         id: accessKey.id,
@@ -65,7 +58,7 @@ export async function POST(req: Request) {
         maxDevices: accessKey.maxDevices,
         durationDays: accessKey.durationDays,
         usedDevices: uniqueDevices.size,
-        course: accessKey.course
+        course: course ? { title: course.title } : null
       }
     });
   } catch (error) {

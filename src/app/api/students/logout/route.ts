@@ -1,6 +1,6 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { deleteSession } from '@/lib/firebase-db';
 
 export async function POST() {
   try {
@@ -8,7 +8,7 @@ export async function POST() {
     const token = cookieStore.get('student_token')?.value;
 
     if (token) {
-      await db.session.deleteMany({ where: { token } }).catch(() => {});
+      await deleteSession(token);
     }
 
     cookieStore.delete('student_token');

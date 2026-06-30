@@ -1,18 +1,11 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { updateRequest, deleteRequest } from '@/lib/firebase-db';
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const body = await req.json();
-    const { status } = body;
-
-    const request = await db.accessRequest.update({
-      where: { id },
-      data: { status },
-      include: { student: true, course: true }
-    });
-
+    const request = await updateRequest(id, body);
     return NextResponse.json(request);
   } catch (error) {
     console.error('Request PUT error:', error);
@@ -23,7 +16,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    await db.accessRequest.delete({ where: { id } });
+    await deleteRequest(id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Request DELETE error:', error);

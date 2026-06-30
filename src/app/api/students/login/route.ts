@@ -1,6 +1,6 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { findStudentByPhone, createStudent, updateStudent, createSession, getStudentActivations } from '@/lib/firebase-db';
 
 export async function POST(req: Request) {
   try {
@@ -12,31 +12,37 @@ export async function POST(req: Request) {
     }
 
     // Find or create student
-    let student = await db.student.findFirst({ where: { phone } });
+    let student = await findStudentByPhone(phone);
 
     if (student) {
-      student = await db.student.update({
-        where: { id: student.id },
-        data: { name, whatsapp: whatsapp || phone, stage: stage || '', year: year || '', fingerprint: fingerprint || student.fingerprint }
+      student = await updateStudent(student.id, {
+        name,
+        whatsapp: whatsapp || phone,
+        stage: stage || '',
+        year: year || '',
+        fingerprint: fingerprint || student.fingerprint
       });
     } else {
-      student = await db.student.create({
-        data: { name, phone, whatsapp: whatsapp || phone, stage: stage || '', year: year || '', fingerprint: fingerprint || null }
+      student = await createStudent({
+        name,
+        phone,
+        whatsapp: whatsapp || phone,
+        stage: stage || '',
+        year: year || '',
+        fingerprint: fingerprint || undefined
       });
     }
 
     // Create session
     const token = `student_${student.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    await db.session.create({
-      data: {
-        studentId: student.id,
-        token,
-        fingerprint: fingerprint || 'unknown',
-        deviceInfo: body.deviceInfo || 'unknown',
-        expiresAt
-      }
+    await createSession({
+      studentId: student.id,
+      token,
+      fingerprint: fingerprint || 'unknown',
+      deviceInfo: body.deviceInfo || 'unknown',
+      expiresAt
     });
 
     const cookieStore = await cookies();
@@ -44,28 +50,26 @@ export async function POST(req: Request) {
       httpOnly: true,
       secure: false,
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30 // 30 days
+      maxAge: 60 * 60 * 24 * 30
     });
 
     // Get student's active access
-    const activations = await db.keyActivation.findMany({
-      where: { studentId: student.id, expiresAt: { gt: new Date() } },
-      include: { accessKey: { include: { course: true } } }
-    });
+    const activations = await getStudentActivations(student.id);
+    const activeCourses = activations
+      .filter(a => new Date(a.expiresAt) > new Date())
+      .map(a => ({
+        courseId: a.accessKey?.courseId,
+        courseTitle: a.accessKey?.course?.title,
+        expiresAt: a.expiresAt
+      }));
 
-    const activeCourses = activations.map(a => ({
-      courseId: a.accessKey.courseId,
-      courseTitle: a.accessKey.course?.title,
-      expiresAt: a.expiresAt
-    }));
-
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       student: { id: student.id, name: student.name, phone: student.phone },
       activeCourses
     });
   } catch (error) {
     console.error('Student login error:', error);
-    return NextResponse.json({ error: 'حدث خطأ' }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في تسجيل الدخول' }, { status: 500 });
   }
 }

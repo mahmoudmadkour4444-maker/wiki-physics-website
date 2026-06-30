@@ -1,15 +1,9 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { getCourses, createCourse } from '@/lib/firebase-db';
 
 export async function GET() {
   try {
-    const courses = await db.course.findMany({
-      include: { 
-        lessons: { orderBy: { order: 'asc' } },
-        _count: { select: { lessons: true, keys: true, requests: true } }
-      },
-      orderBy: { order: 'asc' }
-    });
+    const courses = await getCourses();
     return NextResponse.json(courses);
   } catch (error) {
     console.error('Courses GET error:', error);
@@ -26,14 +20,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'اسم الكورس مطلوب' }, { status: 400 });
     }
 
-    const course = await db.course.create({
-      data: {
-        title,
-        description: description || '',
-        image: image || null,
-        price: price || 'مجاني',
-        order: order || 0
-      }
+    const course = await createCourse({
+      title,
+      description: description || '',
+      image: image || undefined,
+      price: price || 'مجاني',
+      order: order || 0
     });
 
     return NextResponse.json(course);

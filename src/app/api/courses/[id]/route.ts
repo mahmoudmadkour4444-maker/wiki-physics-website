@@ -1,17 +1,10 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { getCourse, updateCourse, deleteCourse } from '@/lib/firebase-db';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const course = await db.course.findUnique({
-      where: { id },
-      include: { 
-        lessons: { orderBy: { order: 'asc' } },
-        keys: { include: { activations: true } },
-        requests: { include: { student: true }, orderBy: { createdAt: 'desc' } }
-      }
-    });
+    const course = await getCourse(id);
 
     if (!course) {
       return NextResponse.json({ error: 'الكورس غير موجود' }, { status: 404 });
@@ -28,12 +21,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   try {
     const { id } = await params;
     const body = await req.json();
-
-    const course = await db.course.update({
-      where: { id },
-      data: body
-    });
-
+    const course = await updateCourse(id, body);
     return NextResponse.json(course);
   } catch (error) {
     console.error('Course PUT error:', error);
@@ -44,7 +32,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    await db.course.delete({ where: { id } });
+    await deleteCourse(id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Course DELETE error:', error);

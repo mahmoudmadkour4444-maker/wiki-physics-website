@@ -1,6 +1,6 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { getAdmin, adminExists, createAdmin } from '@/lib/firebase-db';
 
 export async function POST(req: Request) {
   try {
@@ -12,16 +12,12 @@ export async function POST(req: Request) {
     }
 
     // Auto-create default admin if none exists
-    let adminCount = await db.admin.count();
-    if (adminCount === 0) {
-      await db.admin.create({
-        data: { username: 'admin', password: 'admin123' }
-      });
+    const hasAdmin = await adminExists();
+    if (!hasAdmin) {
+      await createAdmin('admin', 'admin123');
     }
 
-    const admin = await db.admin.findFirst({
-      where: { username, password }
-    });
+    const admin = await getAdmin(username, password);
 
     if (!admin) {
       return NextResponse.json({ error: 'بيانات الدخول غير صحيحة' }, { status: 401 });
@@ -34,7 +30,7 @@ export async function POST(req: Request) {
       httpOnly: true,
       secure: false,
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7 // 7 days
+      maxAge: 60 * 60 * 24 * 7
     });
 
     return NextResponse.json({ success: true, admin: { id: admin.id, username: admin.username }, token });

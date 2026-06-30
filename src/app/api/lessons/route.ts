@@ -1,18 +1,12 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { getAllLessons, getCourseLessons, createLesson } from '@/lib/firebase-db';
 
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const courseId = url.searchParams.get('courseId');
 
-    const where = courseId ? { courseId } : {};
-    const lessons = await db.lesson.findMany({
-      where,
-      include: { course: { select: { title: true } } },
-      orderBy: { order: 'asc' }
-    });
-
+    const lessons = courseId ? await getCourseLessons(courseId) : await getAllLessons();
     return NextResponse.json(lessons);
   } catch (error) {
     console.error('Lessons GET error:', error);
@@ -29,17 +23,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'اسم الدرس والكورس مطلوبان' }, { status: 400 });
     }
 
-    const lesson = await db.lesson.create({
-      data: {
-        title,
-        description: description || null,
-        videoType: videoType || 'youtube',
-        videoUrl: videoUrl || null,
-        filePath: filePath || null,
-        courseId,
-        order: order || 0,
-        duration: duration || null
-      }
+    const lesson = await createLesson({
+      title,
+      description: description || undefined,
+      videoType: videoType || 'youtube',
+      videoUrl: videoUrl || undefined,
+      filePath: filePath || undefined,
+      courseId,
+      order: order || 0,
+      duration: duration || undefined
     });
 
     return NextResponse.json(lesson);

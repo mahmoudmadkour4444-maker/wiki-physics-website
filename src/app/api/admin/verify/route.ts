@@ -1,6 +1,6 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { adminExists } from '@/lib/firebase-db';
 
 export async function GET() {
   try {
@@ -11,16 +11,20 @@ export async function GET() {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    const admin = await db.admin.findFirst();
-    if (!admin) {
+    const hasAdmin = await adminExists();
+    if (!hasAdmin) {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    if (!token.startsWith(`admin_${admin.id}_`)) {
+    if (!token.startsWith('admin_')) {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    return NextResponse.json({ authenticated: true, admin: { id: admin.id, username: admin.username } });
+    // Extract admin ID from token
+    const parts = token.split('_');
+    const adminId = parts[1];
+
+    return NextResponse.json({ authenticated: true, admin: { id: adminId, username: 'admin' } });
   } catch (error) {
     console.error('Admin verify error:', error);
     return NextResponse.json({ authenticated: false }, { status: 500 });
