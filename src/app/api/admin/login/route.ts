@@ -7,6 +7,18 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { username, password } = body;
 
+    if (!username || !password) {
+      return NextResponse.json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' }, { status: 400 });
+    }
+
+    // Auto-create default admin if none exists
+    let adminCount = await db.admin.count();
+    if (adminCount === 0) {
+      await db.admin.create({
+        data: { username: 'admin', password: 'admin123' }
+      });
+    }
+
     const admin = await db.admin.findFirst({
       where: { username, password }
     });
@@ -28,6 +40,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, admin: { id: admin.id, username: admin.username }, token });
   } catch (error) {
     console.error('Admin login error:', error);
-    return NextResponse.json({ error: 'حدث خطأ' }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ في تسجيل الدخول' }, { status: 500 });
   }
 }

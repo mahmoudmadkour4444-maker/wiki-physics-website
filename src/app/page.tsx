@@ -2160,33 +2160,37 @@ export default function WikiPlatform() {
           <div className="space-y-4 mt-4">
             <div>
               <Label>اسم المستخدم</Label>
-              <Input value={adminForm.username} onChange={(e) => setAdminForm({...adminForm, username: e.target.value})} className={inputBg} />
+              <Input 
+                value={adminForm.username} 
+                onChange={(e) => setAdminForm({...adminForm, username: e.target.value})} 
+                className={inputBg} 
+                placeholder="admin"
+                autoComplete="username"
+              />
             </div>
             <div>
               <Label>كلمة المرور</Label>
-              <Input type="password" value={adminForm.password} onChange={(e) => setAdminForm({...adminForm, password: e.target.value})} className={inputBg} />
+              <Input 
+                type="password" 
+                value={adminForm.password} 
+                onChange={(e) => setAdminForm({...adminForm, password: e.target.value})} 
+                className={inputBg} 
+                placeholder="••••••"
+                autoComplete="current-password"
+              />
             </div>
-            <Button className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black font-bold" onClick={handleAdminLogin} disabled={loading}>
+            <Button 
+              className="w-full bg-[#FF7A00] hover:bg-[#FF8A10] text-black font-bold" 
+              onClick={handleAdminLogin} 
+              disabled={loading || !adminForm.username || !adminForm.password}
+            >
               {loading ? 'جاري الدخول...' : 'تسجيل الدخول'}
             </Button>
 
-            {/* Create admin if none exists */}
-            <div className="text-center">
-              <Button variant="link" className="text-sm text-[#FF7A00]" onClick={async () => {
-                const res = await fetch('/api/admin/init', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ username: 'admin', password: 'admin123' })
-                });
-                const data = await res.json();
-                if (data.success) {
-                  toast({ title: 'تم إنشاء حساب أدمن', description: 'اسم المستخدم: admin | كلمة المرور: admin123' });
-                } else {
-                  toast({ title: 'يوجد أدمن بالفعل', description: 'سجل دخولك بالبيانات الموجودة', variant: 'destructive' });
-                }
-              }}>
-                إنشاء حساب أدمن جديد
-              </Button>
+            <div className={`text-center p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-gray-100'}`}>
+              <p className={`text-xs ${textSecondary}`}>
+                💡 بيانات الدخول الافتراضية: <strong>admin</strong> / <strong>admin123</strong>
+              </p>
             </div>
           </div>
         </DialogContent>
